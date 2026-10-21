@@ -46,6 +46,7 @@ function Hash-File([string]$Path) {
     finally { $sha.Dispose(); $stream.Dispose() }
 }
 
+$failure = $null
 try {
     foreach ($value in @('../0.1.0', 'v0.1.0', '01.2.3', "0.1.0`n", '0.1.0;whoami')) {
         Expect-Failure 'invalid release version' { Assert-Version $value }
@@ -102,9 +103,13 @@ try {
         $oldPath = $env:PATH
         & $Installer -Version $InstallVersion -BinDir $destination
         $binary = Join-Path $destination 'emudhraslop.exe'
+        [EmudhraslopInstall.Native]::AssertPrivateDestination($binary)
+        if (([IO.File]::GetAttributes($binary) -band [IO.FileAttributes]::ReadOnly) -ne 0) { throw 'Installed executable is unexpectedly read-only.' }
+        Write-Host 'Running downloaded executable version command.'
         $actual = & $binary version
         if ($LASTEXITCODE -ne 0 -or $actual.Trim() -ne $InstallVersion) { throw 'Downloaded executable failed real version smoke test.' }
         $digest = Hash-File $binary
+        Write-Host 'Replacing the installed executable with the same release.'
         & $Installer -Version $InstallVersion -BinDir $destination
         if ((Hash-File $binary) -ne $digest -or $env:PATH -cne $oldPath) { throw 'Upgrade changed expected bytes or PATH.' }
         $locked = [IO.File]::Open($binary,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
@@ -114,4 +119,9 @@ try {
         if (@([IO.Directory]::GetDirectories($destination,'.install-*')).Count) { throw 'Installer left staging files behind.' }
         Write-Host "PASS: real release install, upgrade, failure preservation ($arch; PowerShell $($PSVersionTable.PSVersion))"
     }
-} finally { [IO.Directory]::Delete($root,$true) }
+} catch { $failure = $_; throw } finally {
+    try { [IO.Directory]::Delete($root,$true) } catch {
+        if (-not $failure) { throw }
+        Write-Warning ('Test cleanup also failed: ' + $_.Exception.Message)
+    }
+}

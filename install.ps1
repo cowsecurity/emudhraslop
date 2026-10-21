@@ -230,7 +230,7 @@ function Install-Emudhraslop([string]$RequestedVersion, [string]$Destination) {
     if ($principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { throw 'Open a normal PowerShell window; installation does not need Administrator.' }
     if ($RequestedVersion) { Assert-Version $RequestedVersion }
     if (-not $Destination) { $Destination = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'emudhraslop\bin' }
-    $lease = $null; $stage = $null
+    $lease = $null; $stage = $null; $failure = $null
     $oldProtocol = [Net.ServicePointManager]::SecurityProtocol
     try {
         [Net.ServicePointManager]::SecurityProtocol = $oldProtocol -bor [Net.SecurityProtocolType]::Tls12
@@ -256,7 +256,7 @@ function Install-Emudhraslop([string]$RequestedVersion, [string]$Destination) {
         $target = [IO.Path]::Combine($lease.Path, 'emudhraslop.exe')
         if ([IO.File]::Exists($target)) {
             if (([IO.File]::GetAttributes($target) -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'Existing executable is a reparse point.' }
-            [IO.File]::Replace($candidate, $target, $null)
+            [IO.File]::Replace($candidate, $target, [Management.Automation.Language.NullString]::Value)
         } else { [IO.File]::Move($candidate, $target) }
         $display = (Join-Path $Destination 'emudhraslop.exe').Replace("'", "''")
         Write-Host "Installed emudhraslop $RequestedVersion. Run:"
@@ -264,10 +264,16 @@ function Install-Emudhraslop([string]$RequestedVersion, [string]$Destination) {
         Write-Host "For agents:"
         Write-Host "  & '$display' check --online --agent"
         Write-Host 'PATH was not changed. No scan has run.'
-    } finally {
-        if ($stage -and [IO.Directory]::Exists($stage)) { [IO.Directory]::Delete($stage, $true) }
-        if ($lease) { $lease.Dispose() }
-        [Net.ServicePointManager]::SecurityProtocol = $oldProtocol
+    } catch { $failure = $_; throw } finally {
+        try {
+            if ($stage -and [IO.Directory]::Exists($stage)) { [IO.Directory]::Delete($stage, $true) }
+        } catch {
+            if (-not $failure) { throw }
+            Write-Warning 'Could not remove installer staging files after the installation error.'
+        } finally {
+            if ($lease) { $lease.Dispose() }
+            [Net.ServicePointManager]::SecurityProtocol = $oldProtocol
+        }
     }
 }
 
