@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>io.emudhraslop.scan</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Library/Emudhraslop/bin/emudhraslop</string>
+    <string>check</string>
+    <string>--offline</string>
+    <string>--services</string>
+    <string>/Library/Application Support/Emudhraslop/services.json</string>
+    <string>--cache</string>
+    <string>/Library/Application Support/Emudhraslop/status.json</string>
+    <string>--timeout</string><string>2m</string>
+    <string>--probe-timeout</string><string>10s</string>
+    <string>--jobs</string><string>2</string>
+    <string>--json</string>
+  </array>
+  <key>StartInterval</key><integer>21600</integer>
+  <key>ProcessType</key><string>Background</string>
+  <key>LowPriorityIO</key><true/>
+  <key>Nice</key><integer>10</integer>
+  <key>StandardOutPath</key><string>/dev/null</string>
+  <key>StandardErrorPath</key><string>/dev/null</string>
+  <key>WorkingDirectory</key><string>/var/empty</string>
+</dict>
+</plist>

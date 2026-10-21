@@ -1,0 +1,115 @@
+name: release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  metadata:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python3 - <<'PY'
+          import importlib.util, os
+          spec = importlib.util.spec_from_file_location('package', 'scripts/package-release.py')
+          package = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(package)
+          tag = os.environ['RELEASE_TAG']
+          if not tag.startswith('v'):
+              raise SystemExit('Expected a v-prefixed SemVer tag')
+          version = tag[1:]
+          package.configuration(version, sorted(package.TARGETS))
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('version=' + version + '\n')
+              output.write('prerelease=' + str('-' in version.split('+')[0]).lower() + '\n')
+          PY
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+  checks:
+    needs: metadata
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+  build:
+    needs: [metadata, checks]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            name: linux-windows
+            targets: linux/amd64 linux/arm64 linux/arm/v7 windows/amd64 windows/arm64
+          - os: macos-15
+            name: macos
+            targets: darwin/amd64 darwin/arm64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00
+        with:
+          go-version: '1.27.3'
+          cache: false
+      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c
+        with:
+          python-version: '3.14'
+      - name: Build and package exact release target set
+        env:
+          VERSION: ${{ needs.metadata.outputs.version }}
+          TARGETS: ${{ matrix.targets }}
+        run: ./scripts/build-release.sh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: release-${{ matrix.name }}
+          path: dist/releases/*
+          if-no-files-found: error
+          retention-days: 7
+  publish:
+    needs: [metadata, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: release-*
+          path: incoming
+      - name: Verify complete archive set, architecture and payload identities
+        env:
+          VERSION: ${{ needs.metadata.outputs.version }}
+        run: python3 scripts/prepare-release.py --source incoming --output publish --version "$VERSION"
+      - name: Publish complete release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          PRERELEASE: ${{ needs.metadata.outputs.prerelease }}
+        run: |
+          set -eu
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo 'Release already exists; refusing to replace its assets' >&2
+            exit 1
+          fi
+          flags=''
+          if [ "$PRERELEASE" = true ]; then flags='--prerelease'; fi
+          gh release create "$RELEASE_TAG" publish/* --verify-tag --target "$GITHUB_SHA" \
+            --title "emudhraslop $RELEASE_TAG" --notes-file .github/RELEASE_NOTES.md --draft $flags
+          gh release edit "$RELEASE_TAG" --draft=false

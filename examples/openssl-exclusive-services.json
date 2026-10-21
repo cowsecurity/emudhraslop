@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "services": [
+    {
+      "id": "example-exclusive-openssl-context",
+      "kind": "openssl",
+      "client": "openssl",
+      "executable": "/usr/bin/openssl",
+      "ca_bundle": "/etc/example-service/exclusive-ca.pem",
+      "exclusive_ca_bundle": true,
+      "source": "Use only after confirming the actual service excludes implicit CA directories and stores",
+      "uid": 10001,
+      "gid": 10001
+    }
+  ]
+}

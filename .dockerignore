@@ -1,0 +1,11 @@
+**
+!dist/
+!dist/linux-amd64/
+!dist/linux-amd64/emudhraslop
+!dist/linux-arm64/
+!dist/linux-arm64/emudhraslop
+!dist/linux-arm-v7/
+!dist/linux-arm-v7/emudhraslop
+!Dockerfile
+!examples/
+!examples/container-services.json

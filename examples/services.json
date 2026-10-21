@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "services": [
+    {
+      "id": "example-api-stdlib",
+      "kind": "python",
+      "client": "stdlib",
+      "executable": "/usr/local/bin/python3",
+      "source": "Replace with the actual service launch configuration",
+      "uid": 10001,
+      "gid": 10001
+    },
+    {
+      "id": "example-worker-https",
+      "kind": "node",
+      "client": "https",
+      "executable": "/usr/local/bin/node",
+      "source": "Replace with the actual worker launch configuration",
+      "uid": 10001,
+      "gid": 10001
+    }
+  ]
+}

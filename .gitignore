@@ -1,0 +1,9 @@
+/dist/
+/build/
+/output/
+*.pkg
+.DS_Store
+__pycache__/
+*.py[cod]
+*.test
+*.test.exe

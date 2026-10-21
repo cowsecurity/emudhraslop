@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Emudhraslop report schema version 1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "checker_version", "incident", "manifest_version", "manifest_sha256", "scan_time", "status", "affected", "mode", "coverage", "results", "errors", "configuration_sha256", "container"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "checker_version": {"type": "string"},
+    "incident": {"const": "emudhra-2026"},
+    "manifest_version": {"type": "string"},
+    "manifest_sha256": {"$ref": "#/$defs/hash"},
+    "scan_time": {"type": "string", "format": "date-time"},
+    "status": {"$ref": "#/$defs/status"},
+    "affected": {"type": ["boolean", "null"]},
+    "mode": {"enum": ["inventory", "offline", "online", "cached"]},
+    "coverage": {"$ref": "#/$defs/coverage"},
+    "results": {"type": ["array", "null"], "items": {"$ref": "#/$defs/result"}},
+    "errors": {"$ref": "#/$defs/strings"},
+    "configuration_sha256": {"type": "string", "pattern": "^([A-Fa-f0-9]{64})?$"},
+    "container": {"type": "boolean"}
+  },
+  "allOf": [
+    {"$ref": "#/$defs/decision"},
+    {
+      "if": {"properties": {"status": {"const": "not_affected"}}},
+      "then": {
+        "properties": {
+          "coverage": {"properties": {"complete": {"const": true}}},
+          "errors": {"maxItems": 0},
+          "results": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"properties": {"status": {"const": "not_affected"}}}
+          }
+        }
+      }
+    },
+    {
+      "if": {"properties": {"status": {"const": "affected"}}},
+      "then": {"properties": {"results": {"type": "array", "contains": {"properties": {"status": {"const": "affected"}}, "required": ["status"]}}}}
+    },
+    {
+      "if": {"properties": {"status": {"const": "unknown"}}},
+      "then": {"properties": {"results": {"items": {"properties": {"status": {"enum": ["unknown", "not_affected"]}}}}}}
+    }
+  ],
+  "$defs": {
+    "hash": {"type": "string", "pattern": "^[A-Fa-f0-9]{64}$"},
+    "status": {"enum": ["affected", "not_affected", "unknown"]},
+    "strings": {"type": ["array", "null"], "items": {"type": "string"}},
+    "decision": {
+      "oneOf": [
+        {"properties": {"status": {"const": "affected"}, "affected": {"const": true}}, "required": ["status", "affected"]},
+        {"properties": {"status": {"const": "not_affected"}, "affected": {"const": false}}, "required": ["status", "affected"]},
+        {"properties": {"status": {"const": "unknown"}, "affected": {"const": null}}, "required": ["status", "affected"]}
+      ]
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scope", "complete", "exclusions", "warnings"],
+      "properties": {
+        "scope": {"type": "string"},
+        "complete": {"type": "boolean"},
+        "exclusions": {"$ref": "#/$defs/strings"},
+        "warnings": {"$ref": "#/$defs/strings"}
+      }
+    },
+    "trustSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "complete"],
+      "properties": {
+        "path": {"type": "string"},
+        "sha256": {"$ref": "#/$defs/hash"},
+        "complete": {"type": "boolean"},
+        "matched_keys": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["chain_id", "outcome"],
+      "properties": {
+        "chain_id": {"type": "string"},
+        "outcome": {"type": "string"},
+        "proof": {"type": "string"},
+        "error_class": {"type": "string"}
+      }
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "uid", "configuration_source", "status", "affected", "reason", "next_action", "control_ok"],
+      "properties": {
+        "id": {"type": "string"},
+        "kind": {"type": "string"},
+        "client": {"type": "string"},
+        "executable": {"type": "string"},
+        "runtime_version": {"type": "string"},
+        "uid": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "image_digest": {"type": "string"},
+        "exclusive_ca_bundle": {"type": "boolean"},
+        "configuration_source": {"type": "string"},
+        "status": {"$ref": "#/$defs/status"},
+        "affected": {"type": ["boolean", "null"]},
+        "reason": {"type": "string"},
+        "next_action": {"type": "string"},
+        "trust_sources": {"type": "array", "items": {"$ref": "#/$defs/trustSource"}},
+        "checks": {"type": "array", "items": {"$ref": "#/$defs/check"}},
+        "control_ok": {"type": "boolean"},
+        "configuration_hash": {"$ref": "#/$defs/hash"}
+      },
+      "allOf": [{"$ref": "#/$defs/decision"}]
+    }
+  }
+}
