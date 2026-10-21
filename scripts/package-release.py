@@ -29,6 +29,7 @@ DOCUMENTS = [
     "docs/negative-proof.md", "docs/security.md", "docs/releases.md",
     "examples/services.json", "examples/container-services.json",
     "examples/openssl-exclusive-services.json", "docs/windows.md",
+    "docs/containers.md", "docs/jamf.md",
 ]
 
 

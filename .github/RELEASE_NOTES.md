@@ -1,61 +1,42 @@
-Check whether your TLS clients trust certificates involved in the eMudhra incident. The checker reports `affected`, `not_affected`, or `unknown` without changing trust stores or installing updates.
+Install and check your TLS clients with fewer steps.
 
-## Download
+- Installers select the OS/CPU, verify the archive and install for the current user. No GitHub CLI, Go or administrator access required.
+- Human output identifies each executable, explains the finding and gives a next step.
+- `--agent` returns the existing JSON report without caching or prompts.
+- Checks only write a cache when you pass `--cache FILE`. Existing `--cached` reads still work.
+- Windows accepts relative paths for `--services`.
 
-Choose the archive for your machine or container image:
+## Install and run
 
-| Platform | Filename suffix |
-| --- | --- |
-| macOS — Apple Silicon | `darwin-arm64.tar.gz` |
-| macOS — Intel | `darwin-amd64.tar.gz` |
-| Linux / containers — x64 | `linux-amd64.tar.gz` |
-| Linux / containers — ARM64 | `linux-arm64.tar.gz` |
-| Linux / containers — ARMv7 | `linux-arm-v7.tar.gz` |
-| Windows — x64 | `windows-amd64.zip` |
-| Windows — ARM64 | `windows-arm64.zip` |
-
-Download `SHA256SUMS` too, verify the archive, then extract it. [Step-by-step installation](https://github.com/cowsecurity/emudhraslop/blob/main/docs/releases.md) includes commands for each OS. This repository currently requires GitHub access. Mac and Windows binaries are unsigned; macOS builds are not notarized.
-
-## Run
-
-From the extracted directory, as your normal user:
+[Copy the install commands for your OS](https://github.com/cowsecurity/emudhraslop#install). The installer prints the exact command to run. On macOS/Linux with the default installation:
 
 ```sh
-./emudhraslop version
-./emudhraslop check --online --no-cache
+"$HOME/.local/bin/emudhraslop" check --online
 ```
 
-On Windows, use a non-Administrator PowerShell window:
+On Windows:
 
 ```powershell
-.\emudhraslop.exe version
-.\emudhraslop.exe check --online --no-cache
+& "$env:LOCALAPPDATA\emudhraslop\bin\emudhraslop.exe" check --online
 ```
 
-On macOS, keep `emudhraslop-sectrust` beside the executable. Online checks contact public incident test hosts and a clean control. Use `--offline` if network calls are not permitted; incomplete checks return `unknown`.
+Online checks contact fixed public incident test hosts and a clean control. Use `--offline` when network calls are not permitted. Installers never start a scan automatically.
 
-## Check a specific application
-
-Create a [service file](https://github.com/cowsecurity/emudhraslop#check-an-application) with the application's runtime, client library and trust settings, then run as that application's user:
+## Agents and CI
 
 ```sh
-./emudhraslop check --online --services services.json --no-cache --json
+emudhraslop check --online --agent
+emudhraslop check --online --services services.json --agent
 ```
 
-On Windows, use `.\emudhraslop.exe` and an absolute path for `--services`, such as `"C:\apps\services.json"`.
+The second command checks the application configurations in your service file. [Examples for applications, containers and CI](https://github.com/cowsecurity/emudhraslop#check-an-application).
 
-For containers, copy the matching Linux binary into the application image and run it there. See [Docker and Kubernetes examples](https://github.com/cowsecurity/emudhraslop#check-a-container). The checker needs the application's own runtimes and trust stores.
-
-## Use the result
-
-| Result | JSON `affected` | Exit code |
+| Result | JSON `affected` | Exit |
 | --- | --- | --- |
 | `not_affected` | `false` | 0 |
 | `affected` | `true` | 2 |
 | `unknown` | `null` | 3 |
 
-Exit 1 means invalid input or a fatal failure. If any context is affected, the overall result is affected even if other contexts are unknown.
+Exit 1 means invalid input or a fatal failure. Unknown needs review; it is not an all-clear. `not_affected` currently requires a declared OpenSSL 3 configuration with one exclusive CA file. A result applies to the tested configuration, not every application on a machine.
 
-`not_affected` currently requires a declared OpenSSL 3 configuration with one exclusive CA file. Other clients can confirm affected status, but a rejected connection alone does not prove they are unaffected. Discovery does not cover every application on a machine. Windows native trust-store assessment and caching are unsupported.
-
-For agents and CI, use `--json --no-cache`, preserve the exit code, and read each result's `reason` and `next_action`. Unknown is not an all-clear. [Agent integration and JSON contract](https://github.com/cowsecurity/emudhraslop/blob/main/docs/agents.md).
+[Manual archives](https://github.com/cowsecurity/emudhraslop/blob/main/docs/releases.md) cover macOS Intel/Apple Silicon; Linux x64/ARM64/ARMv7; and Windows x64/ARM64. `SHA256SUMS` covers the archives and installers. Mac and Windows binaries and installers are unsigned; no notarization or Authenticode signing is claimed. Windows native trust-store assessment and caching remain unsupported.

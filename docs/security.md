@@ -12,7 +12,10 @@ The checker is a local, read-only assessment tool. It crosses boundaries when re
 | Secret disclosure | Runtime/configuration to report | No full environments, arguments, private keys, or raw credential-bearing errors |
 | Stale result presented as current | Cache to decision | Age and configuration/file identity validation; invalid cache stays unknown |
 | Scanner container measures the wrong trust store | Deployment to assessment scope | Execute within the actual application image and user; declare exclusions |
-| Modified release binary or installer | Build to distribution | Pinned toolchain and actions, checksums; optional real operator signing, never fake notarization |
+| Modified release binary or installer | Build to distribution | Pinned toolchain and actions; fixed HTTPS release source; exact unique archive checksum before installation; installer source is taken from the tagged checkout |
+| Archive or destination redirects writes | Download to local installation | Private staging; expected executable entries only; symlink/reparse and unsafe destination rejection; preserve prior installation on failed validation |
+| Terminal control sequences disguise a finding | Runtime/path to human output | Escape untrusted control characters; JSON retains the structured evidence |
+| Easier commands silently broaden behavior | CLI to probe/cache | Online mode stays explicit; agent mode never prompts or caches; normal checks cache only with an explicit destination |
 | Jamf inventory causes expensive scans | Extension attribute to endpoint | Cache-only read; scheduled bounded scan is separate |
 
 No remote authentication, authorization API, multi-tenant storage, or inbound listener is introduced. The relevant components are business logic, local privilege boundaries, privacy, cryptographic identity, supply chain, infrastructure, networking, and logging.

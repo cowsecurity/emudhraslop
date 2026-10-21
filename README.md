@@ -2,43 +2,61 @@
 
 Check whether a TLS client trusts certificates involved in the [eMudhra incident](https://emudhra.we-have-a-problem.com/). Runs on macOS, Linux, Windows, and inside containers. It uses the installed client's verifier and does not change trust stores or install updates.
 
-## Get it
+## Install
 
-[Download a release](https://github.com/cowsecurity/emudhraslop/releases/latest) for your OS and CPU. [Installation instructions](docs/releases.md) include download commands, checksum verification, and extraction for each platform.
+**macOS or Linux** — paste this into a terminal:
 
-- **macOS:** Intel or Apple Silicon. Keep `emudhraslop-sectrust` beside `emudhraslop`.
-- **Linux / containers:** x64, ARM64, or ARMv7. Use the container image's architecture.
-- **Windows:** x64 or ARM64. Use `emudhraslop.exe` in a non-Administrator PowerShell window.
+```sh
+curl --proto '=https' --proto-redir '=https' -fsSL \
+  https://github.com/cowsecurity/emudhraslop/releases/latest/download/install.sh \
+  -o emudhraslop-install.sh && sh emudhraslop-install.sh &&
+export PATH="$HOME/.local/bin:$PATH"
+```
 
-The repository is currently private; downloads require GitHub access. Mac and Windows binaries are unsigned.
+**Windows** — paste this into a normal PowerShell window:
+
+```powershell
+& {
+  $ErrorActionPreference = 'Stop'
+  Invoke-WebRequest https://github.com/cowsecurity/emudhraslop/releases/latest/download/install.ps1 -OutFile emudhraslop-install.ps1
+  & .\emudhraslop-install.ps1
+  $env:PATH = "$env:LOCALAPPDATA\emudhraslop\bin;$env:PATH"
+}
+```
+
+The installer selects your OS and CPU, checks the download's SHA-256, and installs for your account. No GitHub login, Go, Python, or administrator access is needed. It prints the exact command to run next. The snippets add the install directory to this terminal session's `PATH`; the absolute commands below also work in a new terminal. It does not scan, change trust stores, or edit your shell profile.
+
+Mac and Windows releases are unsigned. If your organization's security policy blocks them, use its approved software distribution process. [Manual download and installation](docs/releases.md) is also available. PowerShell script restrictions can be handled by using the manual ZIP route without changing execution policy.
 
 ## First check
 
-Run from the extracted directory as your normal user:
+On macOS or Linux, run:
 
 ```sh
-./emudhraslop version
-./emudhraslop check --online --no-cache
+"$HOME/.local/bin/emudhraslop" check --online
 ```
 
 On Windows:
 
 ```powershell
-.\emudhraslop.exe version
-.\emudhraslop.exe check --online --no-cache
+& "$env:LOCALAPPDATA\emudhraslop\bin\emudhraslop.exe" check --online
 ```
 
-This discovers supported runtimes in managed locations and on `PATH`, then checks them. `--online` contacts fixed public incident test hosts and a clean control. Add `--json` for machine-readable output. Use `--offline` instead if network calls are not permitted; offline checks often return `unknown`.
+If `emudhraslop` is already on your `PATH`, use `emudhraslop check --online`. To update, run the installer again. For automation, pin a release with `sh emudhraslop-install.sh --version 0.2.0` or `.\emudhraslop-install.ps1 -Version 0.2.0`.
+
+This discovers supported runtimes in managed locations and on `PATH`, then checks them. `--online` contacts fixed public incident test hosts and a clean control. Add `--agent` for machine-readable output without cache reads or writes. Use `--offline` instead if network calls are not permitted; offline checks often return `unknown`.
 
 To list discovered runtimes without testing them:
 
 ```sh
-./emudhraslop inventory --no-cache --json
+emudhraslop inventory --agent
 ```
 
 Discovery does not cover every app, virtual environment, or service. It cannot return a whole-machine all-clear. Use a service file for the configurations you need to assess.
 
 ## Read the result
+
+The report shows the executable path, runtime version when available, what the check found, and a next step for each client. Multiple Python or OpenSSL installations appear separately. A runtime finding does not establish that every application using that runtime has the same TLS configuration.
 
 | Status | Meaning | What to do | Exit code |
 | --- | --- | --- | --- |
@@ -77,13 +95,13 @@ Create `services.json` with the application's actual runtime and TLS client. Thi
 Run as the application user:
 
 ```sh
-./emudhraslop check --online --services services.json --no-cache --json
+emudhraslop check --online --services services.json
 ```
 
-Use the Python executable from the application's virtual environment so the check loads its installed libraries. For Windows, use absolute JSON paths such as `"C:\\apps\\api\\.venv\\Scripts\\python.exe"`. The service-file path itself must also be absolute:
+Use the Python executable from the application's virtual environment so the check loads its installed libraries. For Windows, use absolute JSON paths such as `"C:\\apps\\api\\.venv\\Scripts\\python.exe"`. A relative service-file path is resolved from the current directory:
 
 ```powershell
-.\emudhraslop.exe check --online --services "$((Get-Location).Path)\services.json" --no-cache --json
+& "$env:LOCALAPPDATA\emudhraslop\bin\emudhraslop.exe" check --online --services services.json
 ```
 
 If the application explicitly passes a CA file to its client, set `"ca_bundle": "/etc/company/ca.pem"`. For Node, this replaces the default CA list. If Node instead extends its defaults using `NODE_EXTRA_CA_CERTS`, declare `"environment": {"NODE_EXTRA_CA_CERTS": "/etc/company/ca.pem"}`. For Requests configured through the environment, use `"environment": {"REQUESTS_CA_BUNDLE": "/etc/company/ca.pem"}`. Copy the application's actual settings; a service-file scan does not inherit the shell's trust overrides. Do not include tokens or passwords. Custom TLS contexts created inside application code need a separate assessment.
@@ -105,26 +123,26 @@ Rebuild and deploy through your normal process. The manifest's executable and CA
 
 ```sh
 docker exec application /usr/local/bin/emudhraslop check \
-  --online --services /etc/emudhraslop/services.json --no-cache --json
+  --online --services /etc/emudhraslop/services.json --agent
 ```
 
 For Kubernetes, replace the deployment and container names:
 
 ```sh
 kubectl exec deployment/application -c app -- /usr/local/bin/emudhraslop check \
-  --online --services /etc/emudhraslop/services.json --no-cache --json
+  --online --services /etc/emudhraslop/services.json --agent
 ```
 
 Use `--offline` where egress is unavailable. Native checks need a writable temporary directory, even with `--no-cache`. The checker needs no Docker socket or host mounts. A separate scanner container measures its own runtimes and trust stores. Minimal images without a supported native verifier return `unknown`. See [container details](docs/containers.md).
 
 ## Use from an agent or CI job
 
-Use `--json --no-cache`. The CLI never prompts. Capture the exit code before processing the report:
+Use `--agent` (shorthand for `--json --no-cache`). The CLI never prompts. Installation and scanning are separate, so agents can pin the binary and choose when to allow network access. Capture the exit code before processing the report:
 
 ```sh
 umask 077
 code=0
-./emudhraslop check --online --services services.json --no-cache --json \
+emudhraslop check --online --services services.json --agent \
   > report.json || code=$?
 case "$code" in
   0) echo 'Declared configuration is not affected' ;;
@@ -136,6 +154,8 @@ exit "$code"
 ```
 
 This is a script for a CI step; its final line preserves the scan outcome. JSON has `schema_version`, overall `status`, nullable `affected`, and per-client `results` with `reason` and `next_action`. Validate against the [report schema](docs/report.schema.json) before making an automated decision. `affected: null` means unknown; never convert it to `false`. Keep per-client results even when the overall status is affected.
+
+Checks save no cache unless you supply `--cache FILE`.
 
 See [agent integration](docs/agents.md) for validation and timeout handling, or [Jamf integration](docs/jamf.md) for scheduled Mac scans and cached inventory attributes.
 
@@ -149,6 +169,6 @@ make build
 make test
 ```
 
-For macOS native trust checks, use the release archive with its bundled helper, or build it on a Mac with Swift using `make release VERSION=0.1.0`. See [release builds](docs/releases.md#build-archives) for prerequisites and target selection.
+For macOS native trust checks, use the release archive with its bundled helper, or build it on a Mac with Swift using `make release VERSION=0.2.0`. See [release builds](docs/releases.md#build-archives) for prerequisites and target selection.
 
 [Security design](docs/security.md) documents probe isolation and input handling. Embedded incident fixtures contain public certificates only.

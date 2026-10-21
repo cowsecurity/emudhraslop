@@ -2,11 +2,16 @@
 
 Run the standalone binary from an approved artifact. It needs no login, agent framework, model API, browser, or interactive prompt. Pass arguments directly; do not construct a shell command from untrusted service data.
 
+Install a pinned release with the [installer](../README.md#install), or supply a verified binary in the execution environment. Unix installers accept `--version 0.2.0 --bin-dir /absolute/user-owned/bin`; Windows accepts `-Version 0.2.0 -BinDir C:\absolute\user-owned\bin`. They do not prompt or scan. Run installers as a normal user; for container builds, copy the verified binary into the application image.
+
 ```sh
 emudhraslop version
-emudhraslop inventory --scope managed --no-cache --json
-emudhraslop check --offline --services /etc/emudhraslop/services.json --no-cache --json
+emudhraslop inventory --agent
+emudhraslop check --online --agent
+emudhraslop check --offline --services services.json --agent
 ```
+
+`--agent` means `--json --no-cache`. Existing integrations using those two flags still work. The JSON schema and check exit codes are unchanged. Use `--services` when you need a specific application's client and trust settings; discovery alone cannot establish complete machine coverage.
 
 Use `--online` only when the operator permits calls to the fixed incident hosts and clean control. Run inside the application container and as its service identity. Default root restrictions still apply to automated callers.
 
@@ -54,7 +59,7 @@ Capture output before branching on the exit code:
 ```sh
 code=0
 emudhraslop check --offline --services /etc/emudhraslop/services.json \
-  --no-cache --json > report.json || code=$?
+  --agent > report.json || code=$?
 case "$code" in
   0) echo 'Declared scope not affected; retain proof and exclusions';;
   2) echo 'Affected context found; route remediation';;
@@ -65,4 +70,4 @@ esac
 
 Use a private report directory and a bounded process deadline slightly longer than `--timeout`. Do not retry indefinitely: network failures can remain unknown. Do not change trust stores, install dependencies, disable TLS verification, or enable root probes merely to obtain a conclusive status.
 
-For caching, use `--cache FILE` on the initial scan and `--cached --services FILE --cache FILE` for a later read. Cached mode runs no native probes or network requests, but revalidates relevant files. Missing/stale evidence and non-reusable negative proofs remain unknown and require a fresh check. `--no-cache` avoids cache reads and writes and is incompatible with both cache options.
+Caching is opt-in; ordinary checks no longer write a default cache. For caching, use `--cache FILE` on the initial scan and `--cached --services FILE --cache FILE` for a later read. Cached mode runs no native probes or network requests, but revalidates relevant files. Missing/stale evidence and non-reusable negative proofs remain unknown and require a fresh check. `--no-cache` avoids cache reads and writes and is incompatible with both cache options.

@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -17,16 +16,15 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"syscall"
 	"time"
 )
 
 type flags struct {
-	json, online, offline, cached, allowRoot, noCache bool
-	services, cache, scope, incident                  string
-	timeout, probeTimeout, maxAge                     time.Duration
-	jobs                                              int
+	json, agent, online, offline, cached, allowRoot, noCache bool
+	services, cache, scope, incident                         string
+	timeout, probeTimeout, maxAge                            time.Duration
+	jobs                                                     int
 }
 
 func parse(args []string, stderr io.Writer) (string, flags, error) {
@@ -43,15 +41,24 @@ func parse(args []string, stderr io.Writer) (string, flags, error) {
 		return command, f, errors.New("expected inventory, check, or version")
 	}
 	fs := flag.NewFlagSet(command, flag.ContinueOnError)
-	fs.SetOutput(stderr)
+	// flag errors may contain attacker-controlled arguments. Emit our static
+	// diagnostic instead; help contains only the declared flag names/defaults.
+	fs.SetOutput(io.Discard)
+	fs.Usage = func() {
+		fmt.Fprintln(stderr, commandHelp(command))
+		fs.SetOutput(stderr)
+		fs.PrintDefaults()
+		fs.SetOutput(io.Discard)
+	}
 	fs.BoolVar(&f.json, "json", false, "emit versioned JSON")
+	fs.BoolVar(&f.agent, "agent", false, "emit JSON without a report cache; never prompts (same as --json --no-cache)")
 	fs.BoolVar(&f.online, "online", false, "contact fixed public test endpoints with each declared native client")
 	fs.BoolVar(&f.offline, "offline", false, "check local trust without network (default)")
 	fs.BoolVar(&f.noCache, "no-cache", false, "emit report without reading or writing a report cache")
 	fs.BoolVar(&f.cached, "cached", false, "validate a previous result without executing client probes")
 	fs.BoolVar(&f.allowRoot, "allow-root-probes", false, "allow reviewed root-owned managed runtime execution as root")
 	fs.StringVar(&f.services, "services", "", "strict JSON service manifest")
-	fs.StringVar(&f.cache, "cache", "", "local report cache path")
+	fs.StringVar(&f.cache, "cache", "", "opt in to saving a report at this path; also selects the --cached input")
 	fs.StringVar(&f.scope, "scope", "managed", "managed runtime discovery")
 	fs.StringVar(&f.incident, "incident", "emudhra-2026", "embedded incident ID")
 	fs.DurationVar(&f.timeout, "timeout", 2*time.Minute, "total scan deadline")
@@ -63,6 +70,9 @@ func parse(args []string, stderr io.Writer) (string, flags, error) {
 	}
 	if fs.NArg() != 0 {
 		return command, f, errors.New("unexpected arguments")
+	}
+	if f.agent {
+		f.json, f.noCache = true, true
 	}
 	if f.scope != "managed" || f.incident != "emudhra-2026" {
 		return command, f, errors.New("unsupported scope or incident")
@@ -89,8 +99,10 @@ func parse(args []string, stderr io.Writer) (string, flags, error) {
 }
 
 func Run(args []string, stdout, stderr io.Writer) int {
-	if len(args) == 1 && (args[0] == "--help" || args[0] == "-h") {
-		fmt.Fprintln(stdout, "emudhraslop inventory --json\nemudhraslop check --online --services services.json --no-cache --json\nemudhraslop check --offline --services services.json --no-cache --json\nemudhraslop check --help\nemudhraslop version")
+	if len(args) == 0 || (len(args) == 1 && (args[0] == "--help" || args[0] == "-h" || args[0] == "help")) {
+		if _, err := fmt.Fprint(stdout, quickstart); err != nil {
+			return 1
+		}
 		return 0
 	}
 	command, f, err := parse(args, stderr)
@@ -123,7 +135,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		coverage.Warnings = append(coverage.Warnings, "configuration_fingerprint_incomplete")
 	}
 	cachePath := f.cache
-	if cachePath == "" && !f.noCache {
+	if cachePath == "" && f.cached {
 		if base, e := os.UserCacheDir(); e == nil {
 			cachePath = filepath.Join(base, "emudhraslop", "report.json")
 		}
@@ -203,10 +215,19 @@ func loadTargets(path string) ([]model.Target, model.Coverage, error) {
 		t, c := discovery.Managed()
 		return t, c, nil
 	}
+	// Only the CLI accepts relative manifest paths. The Windows file boundary
+	// still rejects UNC/device paths, indirect volumes and all reparse points.
+	if runtime.GOOS == "windows" && !filepath.IsAbs(path) {
+		absolute, err := filepath.Abs(path)
+		if err != nil {
+			return nil, model.Coverage{}, err
+		}
+		path = absolute
+	}
 	t, err := config.Load(path)
 	c := model.Coverage{Scope: "declared-services", Complete: true, Exclusions: []string{"Applications and client contexts absent from the service manifest are not assessed.", "Code signing, inbound server certificates and incident paths absent from the embedded manifest are not assessed."}, Warnings: []string{}}
 	if runtime.GOOS == "windows" {
-		c.Warnings = append(c.Warnings, "Windows checks use the current non-elevated token only; uid/gid 4294967295 is an unsupported Unix placeholder, not a Windows SID; cache reuse is disabled, use --no-cache")
+		c.Warnings = append(c.Warnings, "Windows checks use the current non-elevated token only; uid/gid 4294967295 is an unsupported Unix placeholder, not a Windows SID; report caching is unsupported; fresh checks do not use a cache")
 	}
 	for _, target := range t {
 		if target.MetadataOnly {
@@ -218,27 +239,6 @@ func loadTargets(path string) ([]model.Target, model.Coverage, error) {
 
 func emptyReport(in *incident.Incident, c model.Coverage, mode string) model.Report {
 	return model.Report{SchemaVersion: 1, Version: Version, Incident: in.ID, ManifestVersion: in.Version, ManifestSHA256: in.SHA256, ScanTime: time.Now().UTC(), Status: model.Unknown, Mode: mode, Coverage: c, Results: []model.Result{}, Errors: []string{}}
-}
-
-func emit(out io.Writer, r model.Report, asJSON bool) error {
-	if asJSON {
-		enc := json.NewEncoder(out)
-		enc.SetIndent("", "  ")
-		return enc.Encode(r)
-	}
-	if _, err := fmt.Fprintf(out, "%s: %s (%s; scope=%s)\n", r.Incident, r.Status, r.Mode, r.Coverage.Scope); err != nil {
-		return err
-	}
-	for _, result := range r.Results {
-		if _, err := fmt.Fprintf(out, "%-12s %-24s %s\n", result.Status, result.ID, result.Reason); err != nil {
-			return err
-		}
-	}
-	if len(r.Errors) > 0 {
-		_, err := fmt.Fprintln(out, "Errors:", strings.Join(r.Errors, ", "))
-		return err
-	}
-	return nil
 }
 
 // Null means the available evidence does not establish either answer.

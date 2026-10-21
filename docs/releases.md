@@ -14,14 +14,30 @@ Download from [cowsecurity/emudhraslop releases](https://github.com/cowsecurity/
 
 The full filename is `emudhraslop-VERSION-TARGET.EXTENSION`. Platform availability does not mean every application uses a supported trust verifier. Windows native certificate-store evaluation, elevated execution, and cached checks are unsupported; they produce explicit errors or unknown results. See [coverage](coverage.md) before interpreting any verdict.
 
+## Automatic installation
+
+The [quick install](../README.md#install) selects the platform and verifies its archive. Run it as your normal user. No GitHub account or CLI is required for public releases. Use the commands below for manual installation or managed deployment.
+
+To pin a version or choose a destination:
+
+```sh
+sh emudhraslop-install.sh --version 0.2.0 --bin-dir "$HOME/.local/bin"
+```
+
+```powershell
+.\emudhraslop-install.ps1 -Version 0.2.0 -BinDir "$env:LOCALAPPDATA\emudhraslop\bin"
+```
+
+The installers are also published as `install.sh` and `install.ps1`, with hashes in `SHA256SUMS`. Mac installation includes the adjacent native trust helper. The installer prints an absolute command that works without changing `PATH`.
+
 ## Download on macOS or Linux
 
-These commands use the GitHub CLI (`gh`), authenticated with an account that can read this private repository. Run `gh auth login` first if needed. You can also download the archive and `SHA256SUMS` through the release page.
+These optional manual commands use the GitHub CLI (`gh`). You can also download the archive and `SHA256SUMS` through the public release page, or use the automatic installer above.
 
 Choose a target from the table above. This example downloads the Apple Silicon build; change `target` to `darwin-amd64`, `linux-amd64`, `linux-arm64`, or `linux-arm-v7` as needed. Run in a new directory:
 
 ```sh
-version=0.1.0
+version=0.2.0
 target=darwin-arm64
 archive="emudhraslop-${version}-${target}.tar.gz"
 mkdir "emudhraslop-${version}-${target}"
@@ -55,11 +71,11 @@ On macOS, keep `emudhraslop-sectrust` next to the executable. Mac archives are u
 
 ## Download on Windows
 
-Use a non-Administrator PowerShell window with an authenticated GitHub CLI. Set `$target` to `windows-arm64` for an ARM machine; otherwise use `windows-amd64`:
+Use a non-Administrator PowerShell window with the GitHub CLI installed. Set `$target` to `windows-arm64` for an ARM machine; otherwise use `windows-amd64`:
 
 ```powershell
 $ErrorActionPreference = 'Stop'
-$version = '0.1.0'
+$version = '0.2.0'
 $target = 'windows-amd64'
 $archive = "emudhraslop-$version-$target.zip"
 New-Item -ItemType Directory "emudhraslop-$version-$target" | Out-Null
@@ -95,8 +111,8 @@ For a precise application check, create a [service file](../README.md#check-an-a
 Build prerequisites are Go 1.27.3, Python 3.9+, and a POSIX shell. Mac releases also need Xcode command-line tools with Swift. There are no third-party Go or Python build dependencies.
 
 ```sh
-VERSION=0.1.0 TARGETS='linux/amd64 linux/arm64 linux/arm/v7 windows/amd64 windows/arm64' make release
-VERSION=0.1.0 TARGETS='darwin/amd64 darwin/arm64' make release
+VERSION=0.2.0 TARGETS='linux/amd64 linux/arm64 linux/arm/v7 windows/amd64 windows/arm64' make release
+VERSION=0.2.0 TARGETS='darwin/amd64 darwin/arm64' make release
 ```
 
 Run the second command on macOS. A Mac host defaults to every listed target; other hosts default to Linux and Windows. Each archive contains the platform executable, an Apple helper on Mac, selected docs/examples, and `RELEASE-MANIFEST.json` with payload hashes and platform limitations. Existing archives are never overwritten. Remove only intentionally disposable local output before rebuilding the same version.

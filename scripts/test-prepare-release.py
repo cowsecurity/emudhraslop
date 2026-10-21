@@ -14,6 +14,29 @@ spec.loader.exec_module(prepare)
 
 
 class PublicationBoundary(unittest.TestCase):
+    def test_installers_are_exact_local_regular_bounded_files(self):
+        previous = prepare.PACKAGING.ROOT
+        try:
+            with tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                prepare.PACKAGING.ROOT = root
+                for name in prepare.INSTALLERS:
+                    (root / name).write_bytes(b'installer source\n')
+                self.assertEqual(set(prepare.installer_payload()), {'install.sh', 'install.ps1'})
+                shell = root / 'install.sh'
+                shell.write_bytes(b'x' * ((64 << 10) + 1))
+                with self.assertRaises(ValueError):
+                    prepare.installer_payload()
+                shell.write_bytes(b'')
+                with self.assertRaises(ValueError):
+                    prepare.installer_payload()
+                shell.unlink()
+                shell.symlink_to(root / 'install.ps1')
+                with self.assertRaises(ValueError):
+                    prepare.installer_payload()
+        finally:
+            prepare.PACKAGING.ROOT = previous
+
     def test_rejects_missing_platforms_before_output_creation(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

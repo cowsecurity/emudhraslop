@@ -57,13 +57,18 @@ jobs:
         run: |
           python scripts/test-package-release.py
           python scripts/test-prepare-release.py
+      - name: Unix installer boundaries and real released binary
+        if: runner.os != 'Windows'
+        env:
+          EMUDHRASLOP_TEST_REAL_RELEASE: '0.1.0'
+        run: python scripts/test-install-unix.py
       - name: Container and privilege-boundary checks
         if: matrix.os == 'ubuntu-24.04'
         run: make test-containers test-root-containers
       - name: Script syntax and plist checks
         if: runner.os != 'Windows'
         run: |
-          for script in scripts/*.sh; do sh -n "$script"; done
+          for script in install.sh scripts/*.sh; do sh -n "$script"; done
           if [ "$(uname -s)" = Darwin ]; then
             plutil -lint examples/jamf/io.emudhraslop.scan.plist
           fi

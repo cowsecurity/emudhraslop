@@ -15,6 +15,18 @@ PACKAGING = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(PACKAGING)
 MAX_ARCHIVE = 128 << 20
 MAX_PAYLOAD = 256 << 20
+INSTALLERS = ('install.sh', 'install.ps1')
+
+
+def installer_payload():
+    # Installers come from this tagged checkout, never build-job uploads.
+    result = {}
+    for name in INSTALLERS:
+        data = PACKAGING.read_regular(PACKAGING.ROOT / name)
+        if not data or len(data) > 64 << 10:
+            raise ValueError('Installer is empty or exceeds 64 KiB')
+        result[name] = data
+    return result
 
 
 def archive_payload(path):
@@ -101,15 +113,21 @@ def prepare(source, output, version):
         if target.startswith('darwin/') and not PACKAGING.binary_matches(contents['emudhraslop-sectrust'], target):
             raise ValueError('Apple helper architecture mismatch')
         manifests.append(manifest)
+    installers = installer_payload()
+    installer_hashes = {name: hashlib.sha256(data).hexdigest() for name, data in installers.items()}
     # Validation completes before publishing or copying any untrusted payload.
     if output.exists():
         raise ValueError('Output directory already exists')
     output.mkdir(parents=True)
     for name, path in found.items():
         shutil.copyfile(path, output / name)
-    aggregate = {'schema_version': 1, 'name': 'emudhraslop', 'version': version, 'platforms': manifests}
+    for name, data in installers.items():
+        (output / name).write_bytes(data)
+    aggregate = {'schema_version': 1, 'name': 'emudhraslop', 'version': version,
+                 'platforms': manifests, 'installers': installer_hashes}
     (output / 'RELEASE-MANIFEST.json').write_text(json.dumps(aggregate, indent=2, sort_keys=True) + '\n')
     hashes = {name: declared[name] for name in found}
+    hashes.update(installer_hashes)
     hashes['RELEASE-MANIFEST.json'] = hashlib.sha256((output / 'RELEASE-MANIFEST.json').read_bytes()).hexdigest()
     (output / 'SHA256SUMS').write_text(''.join(digest + '  ' + name + '\n' for name, digest in sorted(hashes.items())))
 

@@ -49,10 +49,18 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "Cannot grant isolated test directory access" }
     }
 
-    foreach ($path in $testFiles) {
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot '..\install.ps1') -Destination (Join-Path $root 'install.ps1')
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'test-install-windows.ps1') -Destination (Join-Path $root 'test-install-windows.ps1')
+    $testRuns = @($testFiles | ForEach-Object { @{ Path = $_; Arguments = '-test.v -test.timeout=4m' } })
+    $shells = @((Join-Path $systemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'), (Get-Command pwsh.exe -ErrorAction Stop).Source)
+    foreach ($shell in $shells) {
+        $testRuns += @{ Path = $shell; Arguments = '-NoLogo -NoProfile -NonInteractive -File "' + (Join-Path $root 'test-install-windows.ps1') + '" -Installer "' + (Join-Path $root 'install.ps1') + '" -Smoke' }
+    }
+    foreach ($run in $testRuns) {
+        $path = $run.Path
         $start = [Diagnostics.ProcessStartInfo]::new()
         $start.FileName = $path
-        $start.Arguments = '-test.v -test.timeout=4m'
+        $start.Arguments = $run.Arguments
         $start.WorkingDirectory = $root
         $start.UseShellExecute = $false
         $start.RedirectStandardOutput = $true
@@ -62,6 +70,7 @@ try {
         $start.Environment['PATH'] = ((Split-Path $node), (Split-Path $python), (Join-Path $systemRoot 'System32')) -join ';'
         $start.Environment['TEMP'] = $root
         $start.Environment['TMP'] = $root
+        $start.Environment['LOCALAPPDATA'] = Join-Path $root 'localappdata'
         $start.Environment['EMUDHRASLOP_TEST_PYTHON'] = $python
         if ($admin) {
             $start.UserName = $username
@@ -74,7 +83,7 @@ try {
         if (-not $process.Start()) { throw "Native test process did not start" }
         $stdout = $process.StandardOutput.ReadToEndAsync()
         $stderr = $process.StandardError.ReadToEndAsync()
-        if (-not $process.WaitForExit(300000)) {
+        if (-not $process.WaitForExit(600000)) {
             $process.Kill($true)
             throw "Native test process exceeded deadline"
         }

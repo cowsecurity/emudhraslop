@@ -27,7 +27,7 @@ func Managed() ([]model.Target, model.Coverage) {
 	if runtime.GOOS == "windows" {
 		directories = nil
 		coverage.Exclusions = append(coverage.Exclusions, "Windows system trust stores, Windows service accounts, elevation and Windows Store aliases; only current-token native client contexts are probed")
-		coverage.Warnings = append(coverage.Warnings, "Windows cache reuse is disabled; use --no-cache; uid/gid values are Unix placeholders and do not represent Windows SIDs")
+		coverage.Warnings = append(coverage.Warnings, "Windows cache reuse is unavailable; fresh checks do not cache; uid/gid values are Unix placeholders and do not represent Windows SIDs")
 	}
 	paths := filepath.SplitList(os.Getenv("PATH"))
 	if len(paths) > maxPATHDirectories {
