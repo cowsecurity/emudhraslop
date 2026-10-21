@@ -15,14 +15,13 @@ import (
 	"github.com/cowsecurity/emudhraslop/internal/config"
 	"github.com/cowsecurity/emudhraslop/internal/model"
 	"github.com/cowsecurity/emudhraslop/internal/platform"
-	"github.com/cowsecurity/emudhraslop/internal/run"
 )
 
 const maxPATHDirectories = 64
 
 func Managed() ([]model.Target, model.Coverage) {
 	coverage := model.Coverage{Scope: "managed", Complete: false,
-		Exclusions: []string{"arbitrary applications, browsers, Java, Rust and Go TLS clients", "custom TLS contexts, virtual environments and undeclared service identities", "other containers, build stages and the host machine", "code signing, inbound server certificates and incident paths absent from the embedded manifest"}, Warnings: []string{}}
+		Exclusions: []string{"arbitrary applications, browsers, Java, Rust and Go TLS clients", "custom TLS contexts, virtual environments absent from PATH and undeclared service identities", "other containers, build stages and the host machine", "code signing, inbound server certificates and incident paths absent from the embedded manifest"}, Warnings: []string{}}
 	directories := []string{"/usr/bin", "/bin", "/usr/local/bin", "/opt/homebrew/bin", "/opt/local/bin"}
 	if runtime.GOOS == "windows" {
 		directories = nil
@@ -41,17 +40,7 @@ func Managed() ([]model.Target, model.Coverage) {
 			coverage.Warnings = append(coverage.Warnings, "relative PATH entry excluded from managed discovery")
 		}
 	}
-	env := map[string]string{}
-	for _, entry := range os.Environ() {
-		key, value, ok := strings.Cut(entry, "=")
-		if runtime.GOOS == "windows" {
-			key = strings.ToUpper(key)
-		}
-		if ok && run.AllowedEnvironment(key) {
-			env[key] = value
-		}
-	}
-	envErr := config.ValidateEnvironment(env)
+	env, envErr := trustEnvironment()
 	if envErr != nil {
 		coverage.Warnings = append(coverage.Warnings, "unsupported trust environment prevents native probing; declare a safe explicit service context")
 		env = nil
@@ -63,6 +52,7 @@ func Managed() ([]model.Target, model.Coverage) {
 	}
 	seen := map[string]bool{}
 	targets := []model.Target{}
+	limitReached := false
 	for _, dir := range directories {
 		for _, candidate := range names {
 			name := candidate.name
@@ -101,7 +91,15 @@ func Managed() ([]model.Target, model.Coverage) {
 				continue
 			}
 
-			key := candidate.kind + ":" + resolved
+			executable, key := resolved, candidate.kind+":"+resolved
+			if candidate.kind == "python" {
+				if root, ok := virtualEnvironment(path); ok {
+					// Python locates pyvenv.cfg from its invocation path. Resolving
+					// that symlink would silently probe the base interpreter instead.
+					executable = path
+					key += ":venv:" + root
+				}
+			}
 			if runtime.GOOS == "windows" {
 				key = strings.ToLower(key)
 				if !platform.ValidPath(resolved) || strings.Contains(strings.ToLower(resolved), `\microsoft\windowsapps\`) {
@@ -113,16 +111,35 @@ func Managed() ([]model.Target, model.Coverage) {
 				continue
 			}
 			seen[key] = true
-			t := model.Target{ID: fmt.Sprintf("managed-%s-%d", candidate.kind, len(targets)+1), Kind: candidate.kind, Client: candidate.client, Executable: resolved, UID: &u, GID: &g, Environment: env, Source: "managed-discovery", MetadataOnly: envErr != nil}
-			if env["NODE_TLS_REJECT_UNAUTHORIZED"] == "0" && t.Kind == "node" {
-				t.VerificationDisabled = true
+			clients := []string{candidate.client}
+			if candidate.kind == "python" {
+				clients = pythonClients
+			} else if candidate.kind == "node" {
+				clients = []string{"tls", "https", "fetch"}
 			}
-			targets = append(targets, t)
+			for _, client := range clients {
+				if len(targets) >= config.MaxTargets {
+					limitReached = true
+					continue
+				}
+				t := model.Target{ID: fmt.Sprintf("managed-%s-%s-%d", candidate.kind, client, len(targets)+1), Kind: candidate.kind, Client: client, Executable: executable, UID: &u, GID: &g, Environment: env, Source: "managed-discovery", MetadataOnly: envErr != nil}
+				if env["NODE_TLS_REJECT_UNAUTHORIZED"] == "0" && t.Kind == "node" {
+					t.VerificationDisabled = true
+				}
+				targets = append(targets, t)
+			}
 		}
 	}
 	if runtime.GOOS == "darwin" {
-		path, client := appleExecutable()
-		targets = append(targets, model.Target{ID: "managed-apple", Kind: "apple", Client: client, Executable: path, UID: &u, GID: &g, Source: "managed-discovery"})
+		if len(targets) < config.MaxTargets {
+			path, client := appleExecutable()
+			targets = append(targets, model.Target{ID: "managed-apple", Kind: "apple", Client: client, Executable: path, UID: &u, GID: &g, Source: "managed-discovery"})
+		} else {
+			limitReached = true
+		}
+	}
+	if limitReached {
+		coverage.Warnings = append(coverage.Warnings, "managed context limit reached; omitted contexts require a separate explicit scan")
 	}
 	sort.Slice(targets, func(i, j int) bool { return targets[i].ID < targets[j].ID })
 	if len(targets) == 0 {

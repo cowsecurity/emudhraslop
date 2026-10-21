@@ -64,7 +64,9 @@ with open(sys.argv[1], encoding="utf-8") as source:
     report = json.load(source)
 code = int(sys.argv[2])
 assert code in (0, 2, 3), ("fatal scanner exit", code)
-assert report["schema_version"] == 1
+assert report["schema_version"] == 2
+assert report["assessment_scope"] == "client_configurations"
+assert report["application_status"] == "unknown"
 assert report["status"] in ("affected", "not_affected", "unknown")
 assert report["container"] is True, "container context was not recorded"
 assert report["results"], "declared fixture silently omitted"
@@ -72,6 +74,8 @@ assert any(row["uid"] == 10001 for row in report["results"])
 assert all(row["status"] == "unknown" for row in report["results"]), report
 assert report["affected"] is None
 assert all(row["affected"] is None for row in report["results"])
+assert all(row["application_status"] == "unknown" for row in report["results"])
+assert all(row["assessment_basis"] == "client_defaults" for row in report["results"])
 assert code == 3, "offline Python/Node/unsupported fixtures must remain unknown"
 assert "cache_write_failed" not in report["errors"], report["errors"]
 if sys.argv[3] in ("python", "node"):

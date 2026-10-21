@@ -100,7 +100,7 @@ def prepare(source, output, version):
         if manifest.get('schema_version') != 1 or manifest.get('name') != 'emudhraslop' or manifest.get('version') != version or manifest.get('target') != target:
             raise ValueError('Platform manifest identity mismatch')
         executable = 'emudhraslop.exe' if target.startswith('windows/') else 'emudhraslop'
-        names = set(PACKAGING.DOCUMENTS) | {executable}
+        names = set(PACKAGING.source_files(target)) | {executable}
         if target.startswith('darwin/'):
             names.add('emudhraslop-sectrust')
         if set(contents) != names or set(manifest['files']) != names:
@@ -110,6 +110,10 @@ def prepare(source, output, version):
                 raise ValueError('Platform payload digest mismatch')
         if not PACKAGING.binary_matches(contents[executable], target):
             raise ValueError('Executable architecture mismatch')
+        if target.startswith('darwin/'):
+            for member in PACKAGING.JAMF_FILES:
+                if contents[member] != PACKAGING.read_regular(PACKAGING.ROOT / member):
+                    raise ValueError('Jamf deployment asset differs from tagged source')
         if target.startswith('darwin/') and not PACKAGING.binary_matches(contents['emudhraslop-sectrust'], target):
             raise ValueError('Apple helper architecture mismatch')
         manifests.append(manifest)

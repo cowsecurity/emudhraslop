@@ -43,11 +43,7 @@ func validateEnvironment(key, value string) error {
 	}
 	switch key {
 	case "NODE_OPTIONS":
-		for _, flag := range strings.Fields(value) {
-			if flag != "--use-system-ca" && flag != "--use-bundled-ca" && flag != "--use-openssl-ca" {
-				return errors.New("unsupported Node runtime option")
-			}
-		}
+		return ValidateNodeOptions(value)
 	case "NODE_USE_SYSTEM_CA", "NODE_TLS_REJECT_UNAUTHORIZED":
 		if value != "0" && value != "1" {
 			return errors.New("unsupported Node trust setting")
@@ -75,4 +71,21 @@ func AllowedEnvironment(key string) bool {
 		return true
 	}
 	return false
+}
+
+// ValidateNodeOptions is shared by manifest, native-probe and execution boundaries.
+// Only CA-selection switches are allowed: imports, loaders and preloads execute code.
+func ValidateNodeOptions(value string) error {
+	if len(value) > 8192 || strings.ContainsAny(value, "\x00\n\r") {
+		return errors.New("unsupported Node runtime option")
+	}
+	for _, flag := range strings.Fields(value) {
+		switch flag {
+		case "--use-system-ca", "--use-bundled-ca", "--use-openssl-ca",
+			"--no-use-system-ca", "--no-use-bundled-ca", "--no-use-openssl-ca":
+		default:
+			return errors.New("unsupported Node runtime option")
+		}
+	}
+	return nil
 }

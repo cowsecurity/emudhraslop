@@ -1,34 +1,51 @@
 # Jamf rollout
 
-This repository supplies an installer builder, scheduled scan definition, and cache-only extension attribute. It does not contact Jamf or change employee machines.
+The package installs a scheduled checker and a private report. It does not contact Jamf, change trust settings, or start its daemon during installation.
 
-1. Define the managed service/runtime contexts for the pilot. Record actual executable paths, client libraries, CA settings, and numeric UID/GID values in `services.json`. Separate developer virtual environments and everyday applications; unsupported contexts remain unknown.
-2. Build and review the local installer:
+1. Create a reviewed `services.json` for the pilot. Use actual executable paths, client libraries, CA settings, and numeric UID/GID values for each machine group. Preserve virtual-environment interpreter paths. A runtime's default TLS settings do not establish a running application's settings.
+2. Build the macOS binaries and package:
 
    ```sh
-   make release VERSION=0.1.0
-   SERVICES_FILE=/absolute/path/reviewed-services.json VERSION=0.1.0 \
-     SIGNING_IDENTITY='Developer ID Application: YOUR ORGANIZATION (TEAMID)' \
-     INSTALLER_IDENTITY='Developer ID Installer: YOUR ORGANIZATION (TEAMID)' \
-     ./scripts/build-jamf-package.sh
+   make release VERSION=0.3.0
+   SERVICES_FILE=/absolute/path/reviewed-services.json VERSION=0.3.0 \
+     SCAN_MODE=online ./scripts/build-jamf-package.sh
    ```
 
-   Real signing identities are optional for local testing and required by your distribution policy. Omitting them produces an explicitly unsigned installer. Notarization is a separate release step using your approved Apple credentials; this script does not claim it happened. Never commit signing secrets.
-3. Upload the reviewed package to a pilot policy. Install first, then enable the daemon in that policy:
+   `SCAN_MODE` accepts `online` (default) or `offline`. Online checks contact the embedded incident hosts under `emudhra.we-have-a-problem.com` and the clean control `www.google.com`, using HTTPS. Approve that egress for the pilot. Offline Python/Node inventory generally remains unknown; use it where online checks are prohibited. The package builder checks manifest syntax; target-machine identity, executable and trust configuration validation happens on that machine.
+
+   For signed packages, supply `SIGNING_IDENTITY` and `INSTALLER_IDENTITY` through your approved build environment. Without them the package is explicitly unsigned. Notarization is a separate distribution step. No signing credentials belong in this repository.
+3. Upload the package to a pilot policy. After installation, enable the job:
 
    ```sh
    launchctl bootstrap system /Library/LaunchDaemons/io.emudhraslop.scan.plist
    launchctl kickstart system/io.emudhraslop.scan
    ```
 
-   Bootstrap is a one-time operation; subsequent policies should inspect whether the job is already loaded. The package itself deliberately does not load or run the job.
-4. Add `scripts/jamf-extension-attribute.sh` as a string extension attribute. It only reads and validates the cached report. It returns `unknown` when files, cache freshness, or configuration validation fail. It never starts a scan during Jamf inventory.
-5. Create review groups for `affected` and `unknown`. Use each context's reason and next action to assign remediation, then rerun the same scan after updating the underlying runtime/trust configuration. A `not_affected` context does not clear unsupported apps on the machine. Cached reads may require a fresh assessment where the underlying proof is not reusable.
+   Bootstrap is a one-time operation. On later policies, check whether the job is already loaded before bootstrapping again. Review the first report locally before widening deployment.
+4. Add `scripts/jamf-extension-attribute.sh` as a string extension attribute named **Emudhraslop Last Observation**. Use these exact groups:
 
-The launch daemon runs offline every six hours, a scheduling choice that can be changed before packaging. Its per-scan limit is two minutes with two native probes at once. Runtime results are stored in the private cache directory, not a world-readable log. The extension attribute exposes only the status word.
+   | Value | Action |
+   | --- | --- |
+   | `observed_affected` | Investigate the client configurations in the last scan; assign remediation and rescan. |
+   | `observed_not_affected` | Retain the proof for the declared scope; this does not clear unassessed applications. |
+   | `observed_unknown` | Collect missing client settings, access, or evidence. |
+   | `unknown` | No recent usable report; inspect deployment and run a new scan. |
 
-The daemon starts as root so it can assess explicitly managed identities. It does not enable root execution of discovered programs. Declare service UID/GID pairs for privilege drops; user-owned executables must not be assessed as root. Where native checks cannot run safely, results remain unknown. Review `--allow-root-probes` only for root services with trusted paths, and amend the plist explicitly if justified.
+   Update existing smart groups that matched the old `affected`/`not_affected` values. The attribute reports **historical observations**, not current protection. It does not execute client runtimes, contact the network, or reread current trust files. Reports older than 24 hours, from another checker/incident version, malformed reports, and reports without owner-private permissions produce `unknown`.
+5. Inspect observation time and freshness when triaging:
 
-For offline Python/Node contexts, inventory alone cannot establish protection. Schedule deliberately approved online checks or collect an appropriate native verification result where needed; the supplied offline policy prioritizes safe inventory and evidence collection.
+   ```sh
+   /Library/Emudhraslop/bin/emudhraslop observation \
+     --cache '/Library/Application Support/Emudhraslop/status.json' --json
+   ```
 
-Installed paths are `/Library/Emudhraslop/bin/emudhraslop`, `/Library/Application Support/Emudhraslop/services.json`, `/Library/Application Support/Emudhraslop/status.json`, and `/Library/LaunchDaemons/io.emudhraslop.scan.plist`. The package builder requires a real reviewed manifest and does not ship example identities as fleet configuration.
+   JSON includes `last_observed_status`, `observed_at`, `state` (`fresh`, `stale`, or `invalid`), and `current_status`, which is always `unknown`. A stale but valid record retains its historical status and timestamp in JSON. The plain command emits `unknown` for stale records. Exit 0 means a recent observation was read, regardless of its historical verdict; exit 3 means stale/unavailable; exit 1 means invalid arguments or a fatal command error. Use `check` for a new verdict.
+6. After remediation, rerun the same client contexts and compare fresh results. Changing a manifest or trust file does not rewrite history. A cached observation may describe the configuration before that change; only a new scan tests the changed configuration.
+
+The daemon runs every six hours with a two-minute scan deadline and two simultaneous native probes. These are adjustable rollout limits; large manifests or slow networks can leave contexts unknown. Reports are private to root at `/Library/Application Support/Emudhraslop/status.json`; the extension attribute exposes only the historical status word.
+
+The daemon starts as root to assess declared service identities. Declare nonroot UID/GID pairs for privilege drops. It does not enable root execution of discovered programs. Never run user-owned virtual environments as root. A root service requires separately reviewed trusted executable paths and explicit `--allow-root-probes`; the supplied daemon does not enable it.
+
+The package installs the binary and Apple helper under `/Library/Emudhraslop/bin`, the manifest and report under `/Library/Application Support/Emudhraslop`, and the daemon under `/Library/LaunchDaemons`. The private report is protected by local ownership and permissions, not a digital signature: an administrator or compromised scanning identity can replace its own evidence. Keep Jamf access limited accordingly.
+
+Python probes require nonroot execution even with `--allow-root-probes`. For a root-started Jamf scan, declare both a nonzero UID and GID for each Python context. Python startup can read virtual-environment and standard-library configuration before the probe script runs.

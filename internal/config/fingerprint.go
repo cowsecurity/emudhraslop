@@ -40,6 +40,20 @@ func Fingerprint(targets []model.Target) (string, error) {
 				return "", err
 			}
 		}
+		// Venv aliases can share executable bytes but have different package and
+		// trust settings. Bind their configuration without resolving the alias.
+		if t.Kind == "python" && t.Executable != "" {
+			path := filepath.Join(filepath.Dir(filepath.Dir(t.Executable)), "pyvenv.cfg")
+			file, openErr := platform.OpenRead(path)
+			if openErr == nil {
+				file.Close()
+				if err := hashFile(h, path, 64<<10, &budget, seen); err != nil {
+					return "", err
+				}
+			} else if !os.IsNotExist(openErr) {
+				return "", errors.New("virtual environment configuration unavailable")
+			}
+		}
 		files := []string{t.CABundle}
 		dirs := []string{t.CADir}
 		for key, value := range t.Environment {

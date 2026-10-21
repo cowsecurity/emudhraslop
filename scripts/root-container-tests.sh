@@ -39,7 +39,7 @@ fi
 for package in run probe cache; do
   case "$package" in
     run) selection='.';;
-    probe) selection='^(TestRootNativeFixtureParentIsNotWritableByDroppedIdentity|TestNativeWriteCannotFollowOrReplaceExistingFixture|TestOpenSSL3DroppedIdentityCannotGainTrustFileAccessThroughSnapshot)$';;
+    probe) selection='^(TestRootNativeFixtureParentIsNotWritableByDroppedIdentity|TestNativeWriteCannotFollowOrReplaceExistingFixture|TestOpenSSL3DroppedIdentityCannotGainTrustFileAccessThroughSnapshot|TestRootPython.*)$';;
     cache) selection='.';;
   esac
   if ! "$CONTAINER_ENGINE" run --rm --network none --read-only --cap-drop ALL \
@@ -63,7 +63,10 @@ required = {
             "TestRequestedGroupCannotSilentlyUseInheritedGroup"],
     "probe": ["TestRootNativeFixtureParentIsNotWritableByDroppedIdentity",
               "TestNativeWriteCannotFollowOrReplaceExistingFixture",
-              "TestOpenSSL3DroppedIdentityCannotGainTrustFileAccessThroughSnapshot"],
+              "TestOpenSSL3DroppedIdentityCannotGainTrustFileAccessThroughSnapshot",
+              "TestRootPythonCannotBypassDenialWithTrustedPathsOrAllowRoot",
+              "TestRootPythonHostileVenvStartupIsNeverExecuted",
+              "TestRootPythonExplicitNonrootIdentityStillExecutes"],
     "cache": ["TestPrivateRoundTripAndStoreMutation",
               "TestTrustSourceReplacedByFIFOIsRejectedWithoutBlocking"],
 }

@@ -53,6 +53,9 @@ jobs:
         env:
           EMUDHRASLOP_NATIVE_APPLE_TEST: '1'
         run: go test ./internal/probe -run '^TestAppleNativeFixtures$' -count=1 -timeout=2m
+      - name: Jamf package and historical observation integration
+        if: runner.os == 'macOS'
+        run: python scripts/test-jamf-package.py
       - name: Release packaging boundary tests
         run: |
           python scripts/test-package-release.py
@@ -64,7 +67,9 @@ jobs:
         run: python scripts/test-install-unix.py
       - name: Container and privilege-boundary checks
         if: matrix.os == 'ubuntu-24.04'
-        run: make test-containers test-root-containers
+        run: |
+          make test-containers test-root-containers
+          ROOT_TEST_BASE=docker.io/library/python:3.14-slim ROOT_TEST_OUTPUT=dist/root-python314-evidence make test-root-containers
       - name: Script syntax and plist checks
         if: runner.os != 'Windows'
         run: |

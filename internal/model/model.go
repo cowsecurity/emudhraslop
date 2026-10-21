@@ -2,6 +2,8 @@ package model
 
 import "time"
 
+const SchemaVersion = 2
+
 type Status string
 
 const (
@@ -51,6 +53,8 @@ type Result struct {
 	UID               uint32        `json:"uid"`
 	ImageDigest       string        `json:"image_digest,omitempty"`
 	Source            string        `json:"configuration_source"`
+	AssessmentBasis   string        `json:"assessment_basis"`
+	ApplicationStatus Status        `json:"application_status"`
 	ExclusiveCABundle bool          `json:"exclusive_ca_bundle,omitempty"`
 	Status            Status        `json:"status"`
 	Affected          *bool         `json:"affected"`
@@ -71,6 +75,8 @@ type Coverage struct {
 
 type Report struct {
 	SchemaVersion       int       `json:"schema_version"`
+	AssessmentScope     string    `json:"assessment_scope"`
+	ApplicationStatus   Status    `json:"application_status"`
 	Version             string    `json:"checker_version"`
 	Incident            string    `json:"incident"`
 	ManifestVersion     string    `json:"manifest_version"`
@@ -91,7 +97,26 @@ func NewResult(t Target) Result {
 	if t.UID != nil {
 		uid = *t.UID
 	}
+	basis := "client_defaults"
+	if t.CABundle != "" || t.CADir != "" || len(t.Environment) != 0 || t.ExclusiveCABundle || t.VerificationDisabled {
+		basis = "configured_client"
+	}
 	return Result{ID: t.ID, Kind: t.Kind, Client: t.Client, Executable: t.Executable, UID: uid,
+		AssessmentBasis: basis, ApplicationStatus: Unknown,
 		ImageDigest: t.ImageDigest, Source: t.Source, ExclusiveCABundle: t.ExclusiveCABundle, Status: Unknown,
 		Reason: "not_checked", NextAction: "Run a supported native client check."}
+}
+
+// No current adapter executes within a running application. Stored evidence
+// must retain this boundary rather than acquire an application verdict on read.
+func (r Report) ValidAssessmentScope() bool {
+	if r.SchemaVersion != SchemaVersion || r.AssessmentScope != "client_configurations" || r.ApplicationStatus != Unknown {
+		return false
+	}
+	for _, result := range r.Results {
+		if result.ApplicationStatus != Unknown || (result.AssessmentBasis != "client_defaults" && result.AssessmentBasis != "configured_client") {
+			return false
+		}
+	}
+	return true
 }

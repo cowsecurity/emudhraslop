@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 cd "$(dirname "$0")/.."
-VERSION=${VERSION:-0.1.0-dev}
+VERSION=${VERSION:-0.3.0-dev}
 PYTHON=${PYTHON:-python3}
 CHECKSUM_DIR=${CHECKSUM_DIR:-dist}
 case "$VERSION" in *[!a-zA-Z0-9.+_-]*|'') echo 'Invalid VERSION' >&2; exit 1;; esac

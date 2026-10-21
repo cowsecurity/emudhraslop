@@ -4,9 +4,10 @@ The checker is a local, read-only assessment tool. It crosses boundaries when re
 
 | Risk | Boundary | Control |
 | --- | --- | --- |
+| Client defaults misreported as an application verdict | Report to automation | Schema 2 fixes assessment scope to client configurations and keeps application status unknown; discovery never maps listeners to affected applications |
 | False protection after blocked egress or generic TLS failure | Native result to security verdict | Attribute proof to the declared client and fixture; ambiguous failure stays unknown |
 | Poisoned incident fixtures | Embedded public data to probe | Verify payload hashes and certificate/SPKI identities before use; no private keys |
-| Root execution of attacker-owned code | Discovered executable to subprocess | Default deny; explicit service UID/GID privilege drop, or reviewed root opt-in with trusted paths |
+| Root execution of attacker-owned code | Discovered executable to subprocess | Default deny; Python always requires nonroot execution (nonzero UID/GID when dropping privileges). Other reviewed runtimes may use root opt-in with trusted paths |
 | Environment injection | Manifest to native process | Allowlisted TLS/proxy settings, isolated working directory, no inherited complete environment or preload hooks |
 | Unbounded or hung runtime | Child process to scanner | Bounded concurrency, deadline, process-group cleanup, capped output |
 | Secret disclosure | Runtime/configuration to report | No full environments, arguments, private keys, or raw credential-bearing errors |
@@ -16,7 +17,7 @@ The checker is a local, read-only assessment tool. It crosses boundaries when re
 | Archive or destination redirects writes | Download to local installation | Private staging; expected executable entries only; symlink/reparse and unsafe destination rejection; preserve prior installation on failed validation |
 | Terminal control sequences disguise a finding | Runtime/path to human output | Escape untrusted control characters; JSON retains the structured evidence |
 | Easier commands silently broaden behavior | CLI to probe/cache | Online mode stays explicit; agent mode never prompts or caches; normal checks cache only with an explicit destination |
-| Jamf inventory causes expensive scans | Extension attribute to endpoint | Cache-only read; scheduled bounded scan is separate |
+| Jamf inventory causes expensive scans or implies current protection | Extension attribute to endpoint | Historical observation only; scheduled bounded scan is separate; observed results cannot establish current protection |
 
 No remote authentication, authorization API, multi-tenant storage, or inbound listener is introduced. The relevant components are business logic, local privilege boundaries, privacy, cryptographic identity, supply chain, infrastructure, networking, and logging.
 

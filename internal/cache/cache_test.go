@@ -35,7 +35,7 @@ func fixture(t *testing.T) (string, model.Report) {
 		t.Fatal(err)
 	}
 	h := sha256.Sum256([]byte("trust policy fixture"))
-	r := model.Report{SchemaVersion: 1, Version: "test", ManifestSHA256: strings.Repeat("a", 64), ConfigurationSHA256: strings.Repeat("b", 64), ScanTime: time.Now().UTC(), Status: model.Affected, Results: []model.Result{{ID: "service", Status: model.Affected, TrustSources: []model.TrustSource{{Path: store, SHA256: hex.EncodeToString(h[:]), Complete: true}}}}}
+	r := model.Report{SchemaVersion: model.SchemaVersion, AssessmentScope: "client_configurations", ApplicationStatus: model.Unknown, Version: "test", ManifestSHA256: strings.Repeat("a", 64), ConfigurationSHA256: strings.Repeat("b", 64), ScanTime: time.Now().UTC(), Status: model.Affected, Results: []model.Result{{ID: "service", AssessmentBasis: "client_defaults", ApplicationStatus: model.Unknown, Status: model.Affected, TrustSources: []model.TrustSource{{Path: store, SHA256: hex.EncodeToString(h[:]), Complete: true}}}}}
 	return filepath.Join(dir, "cache.json"), r
 }
 
@@ -72,6 +72,10 @@ func TestStaleFutureContextAndForgedProtectionFailClosed(t *testing.T) {
 		{"stale", func(r *model.Report) { r.ScanTime = time.Now().Add(-2 * time.Hour) }},
 		{"future", func(r *model.Report) { r.ScanTime = time.Now().Add(time.Hour) }},
 		{"wrong tool", func(r *model.Report) { r.Version = "old" }},
+		{"legacy scope", func(r *model.Report) { r.SchemaVersion = 1 }},
+		{"forged application verdict", func(r *model.Report) { r.ApplicationStatus = model.NotAffected }},
+		{"forged client application verdict", func(r *model.Report) { r.Results[0].ApplicationStatus = model.Affected }},
+		{"missing basis", func(r *model.Report) { r.Results[0].AssessmentBasis = "" }},
 		{"wrong manifest", func(r *model.Report) { r.ManifestSHA256 = strings.Repeat("c", 64) }},
 		{"wrong context", func(r *model.Report) { r.ConfigurationSHA256 = strings.Repeat("d", 64) }},
 		{"protected with rehashed file", func(r *model.Report) {

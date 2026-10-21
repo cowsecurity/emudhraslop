@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-var Version = "0.1.0-dev"
+var Version = "0.3.0-dev"
 
 type ScanOptions struct {
 	Probe probe.Options
@@ -18,7 +18,7 @@ type ScanOptions struct {
 }
 
 func Scan(ctx context.Context, targets []model.Target, coverage model.Coverage, in *incident.Incident, opts ScanOptions) model.Report {
-	report := model.Report{SchemaVersion: 1, Version: Version, Incident: in.ID, ManifestVersion: in.Version, ManifestSHA256: in.SHA256, ScanTime: time.Now().UTC(), Mode: opts.Mode, Coverage: coverage, Results: make([]model.Result, len(targets)), Errors: []string{}}
+	report := model.Report{SchemaVersion: model.SchemaVersion, AssessmentScope: "client_configurations", ApplicationStatus: model.Unknown, Version: Version, Incident: in.ID, ManifestVersion: in.Version, ManifestSHA256: in.SHA256, ScanTime: time.Now().UTC(), Mode: opts.Mode, Coverage: coverage, Results: make([]model.Result, len(targets)), Errors: []string{}}
 	if err := in.Validate(report.ScanTime); err != nil {
 		report.Errors = append(report.Errors, "fixture_validation_failed")
 		report.Coverage.Complete = false

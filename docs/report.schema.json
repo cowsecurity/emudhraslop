@@ -1,11 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Emudhraslop report schema version 1",
+  "title": "Emudhraslop report schema version 2",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "checker_version", "incident", "manifest_version", "manifest_sha256", "scan_time", "status", "affected", "mode", "coverage", "results", "errors", "configuration_sha256", "container"],
+  "required": ["schema_version", "checker_version", "incident", "manifest_version", "manifest_sha256", "scan_time", "status", "affected", "mode", "coverage", "results", "errors", "configuration_sha256", "container", "assessment_scope", "application_status"],
   "properties": {
-    "schema_version": {"const": 1},
+    "schema_version": {"const": 2},
     "checker_version": {"type": "string"},
     "incident": {"const": "emudhra-2026"},
     "manifest_version": {"type": "string"},
@@ -18,7 +18,9 @@
     "results": {"type": ["array", "null"], "items": {"$ref": "#/$defs/result"}},
     "errors": {"$ref": "#/$defs/strings"},
     "configuration_sha256": {"type": "string", "pattern": "^([A-Fa-f0-9]{64})?$"},
-    "container": {"type": "boolean"}
+    "container": {"type": "boolean"},
+    "assessment_scope": {"const": "client_configurations"},
+    "application_status": {"const": "unknown"}
   },
   "allOf": [
     {"$ref": "#/$defs/decision"},
@@ -92,7 +94,7 @@
     "result": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "kind", "uid", "configuration_source", "status", "affected", "reason", "next_action", "control_ok"],
+      "required": ["id", "kind", "uid", "configuration_source", "status", "affected", "reason", "next_action", "control_ok", "assessment_basis", "application_status"],
       "properties": {
         "id": {"type": "string"},
         "kind": {"type": "string"},
@@ -110,7 +112,9 @@
         "trust_sources": {"type": "array", "items": {"$ref": "#/$defs/trustSource"}},
         "checks": {"type": "array", "items": {"$ref": "#/$defs/check"}},
         "control_ok": {"type": "boolean"},
-        "configuration_hash": {"$ref": "#/$defs/hash"}
+        "configuration_hash": {"$ref": "#/$defs/hash"},
+        "assessment_basis": {"enum": ["client_defaults", "configured_client"]},
+        "application_status": {"const": "unknown"}
       },
       "allOf": [{"$ref": "#/$defs/decision"}]
     }

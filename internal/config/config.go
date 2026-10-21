@@ -144,7 +144,7 @@ func defaultClient(kind string) string {
 func Supported(kind, client string) bool {
 	switch kind {
 	case "python":
-		return client == "stdlib" || client == "requests" || client == "httpx" || client == "botocore"
+		return client == "stdlib" || client == "requests" || client == "httpx" || client == "botocore" || client == "urllib3" || client == "aiohttp"
 	case "node":
 		return client == "tls" || client == "https" || client == "fetch"
 	case "apple":

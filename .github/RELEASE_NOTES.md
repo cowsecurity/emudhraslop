@@ -1,42 +1,27 @@
-Install and check your TLS clients with fewer steps.
+Check more clients without confusing runtime trust with application impact.
 
-- Installers select the OS/CPU, verify the archive and install for the current user. No GitHub CLI, Go or administrator access required.
-- Human output identifies each executable, explains the finding and gives a next step.
-- `--agent` returns the existing JSON report without caching or prompts.
-- Checks only write a cache when you pass `--cache FILE`. Existing `--cached` reads still work.
-- Windows accepts relative paths for `--services`.
+- Reports now use **schema version 2**. `assessment_scope` is `client_configurations`; `application_status` remains `unknown`. Existing status/affected values and exit codes describe the tested client only. Update strict schema consumers before rollout; service manifests remain version 1.
+- `--project .` includes Python environments in the selected directory and its `.venv`, `venv`, and `env` children. Activated environments retain their interpreter paths.
+- Native Python checks cover stdlib, Requests, HTTPX, Botocore, urllib3, and aiohttp. Node checks cover TLS, HTTPS, and built-in fetch, with peer-certificate attribution from the actual connection. Missing libraries remain unknown; scanning installs nothing.
+- Jamf uses scheduled online checks and a separate historical `observation` command. Extension attributes return `observed_*` values; old results never become a fresh protection verdict. Mac archives include the deployment plist and extension attribute.
+- Python probes require a nonroot identity, including when root probes are otherwise enabled. Root-started scans must declare nonzero UID/GID values for Python.
 
-## Install and run
+## Use
 
-[Copy the install commands for your OS](https://github.com/cowsecurity/emudhraslop#install). The installer prints the exact command to run. On macOS/Linux with the default installation:
-
-```sh
-"$HOME/.local/bin/emudhraslop" check --online
-```
-
-On Windows:
-
-```powershell
-& "$env:LOCALAPPDATA\emudhraslop\bin\emudhraslop.exe" check --online
-```
-
-Online checks contact fixed public incident test hosts and a clean control. Use `--offline` when network calls are not permitted. Installers never start a scan automatically.
-
-## Agents and CI
+Install or update using the [installation instructions](https://github.com/cowsecurity/emudhraslop#install), then run:
 
 ```sh
-emudhraslop check --online --agent
-emudhraslop check --online --services services.json --agent
+emudhraslop check --online
+emudhraslop check --online --project .
+emudhraslop check --online --project . --agent
 ```
 
-The second command checks the application configurations in your service file. [Examples for applications, containers and CI](https://github.com/cowsecurity/emudhraslop#check-an-application).
+Use `--services services.json` to supply exact interpreter paths, HTTP clients, identities and CA settings. This tests those client settings in isolation; it does not attach to a running application or assess incoming listening ports.
 
-| Result | JSON `affected` | Exit |
-| --- | --- | --- |
-| `not_affected` | `false` | 0 |
-| `affected` | `true` | 2 |
-| `unknown` | `null` | 3 |
+## Deployment
 
-Exit 1 means invalid input or a fatal failure. Unknown needs review; it is not an all-clear. `not_affected` currently requires a declared OpenSSL 3 configuration with one exclusive CA file. A result applies to the tested configuration, not every application on a machine.
+[Jamf rollout](https://github.com/cowsecurity/emudhraslop/blob/main/docs/jamf.md) · [Containers](https://github.com/cowsecurity/emudhraslop/blob/main/docs/containers.md) · [Agent contract](https://github.com/cowsecurity/emudhraslop/blob/main/docs/agents.md)
 
-[Manual archives](https://github.com/cowsecurity/emudhraslop/blob/main/docs/releases.md) cover macOS Intel/Apple Silicon; Linux x64/ARM64/ARMv7; and Windows x64/ARM64. `SHA256SUMS` covers the archives and installers. Mac and Windows binaries and installers are unsigned; no notarization or Authenticode signing is claimed. Windows native trust-store assessment and caching remain unsupported.
+Runtime tests cover native certificate trust, hostname rejection, redirects, timeouts and exact connection attribution. Container integration runs in Python 3.11/3.14 and Node 22/24 images as a nonroot user with a read-only filesystem and no external network access. Jamf tests build and expand unsigned universal Mac packages and execute the real extension-attribute path.
+
+Archives cover macOS Intel/Apple Silicon, Linux x64/ARM64/ARMv7, and Windows x64/ARM64. SHA256SUMS covers archives and installers. Publisher signing, Apple notarization and Windows Authenticode signing are not supplied. Windows native trust-store assessment and report storage remain unsupported. Browsers, Java, Go, Rust, .NET and application-specific TLS hooks remain outside coverage.

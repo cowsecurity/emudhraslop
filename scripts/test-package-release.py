@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Boundary checks for release inputs and archive assembly, without extracting files."""
+import hashlib
 import importlib.util
 import json
 import os
@@ -50,7 +51,7 @@ class PackagingTests(unittest.TestCase):
             with tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
                 package.ROOT = root
-                for document in package.DOCUMENTS:
+                for document in package.DOCUMENTS + package.JAMF_FILES:
                     path = root / document
                     path.parent.mkdir(parents=True, exist_ok=True)
                     path.write_text("release documentation\n")
@@ -74,6 +75,18 @@ class PackagingTests(unittest.TestCase):
                 darwin = root / "dist/darwin-arm64"
                 darwin.mkdir()
                 (darwin / "emudhraslop").write_bytes(b"\xcf\xfa\xed\xfe" + struct.pack("<I", 0x0100000C))
+                with self.assertRaises(ValueError):
+                    package.payload("1.2.3", "darwin/arm64")
+                (darwin / "emudhraslop-sectrust").write_bytes((darwin / "emudhraslop").read_bytes())
+                mac = package.payload("1.2.3", "darwin/arm64")
+                mac_manifest = json.loads(mac["RELEASE-MANIFEST.json"][0])
+                for asset in package.JAMF_FILES:
+                    self.assertIn(asset, mac)
+                    self.assertNotIn(asset, payload)
+                    self.assertEqual(mac_manifest["files"][asset], hashlib.sha256(mac[asset][0]).hexdigest())
+                self.assertEqual(mac["scripts/jamf-extension-attribute.sh"][1], 0o555)
+                (root / package.JAMF_FILES[0]).unlink()
+                (root / package.JAMF_FILES[0]).symlink_to(root / "secret-token")
                 with self.assertRaises(ValueError):
                     package.payload("1.2.3", "darwin/arm64")
         finally:

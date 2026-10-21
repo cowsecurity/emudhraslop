@@ -55,6 +55,7 @@ func emitHuman(out io.Writer, r model.Report) error {
 	}
 	line("Client configurations: %d total; %d affected, %d not affected, %d unknown.", len(r.Results), affected, notAffected, unknown)
 	line("Incident: %s | Mode: %s | Scope: %s", terminal(r.Incident), terminal(r.Mode), terminal(r.Coverage.Scope))
+	line("Application status: UNKNOWN. These isolated client checks do not test running applications or listening ports.")
 	if !r.ScanTime.IsZero() {
 		line("Checked at: %s", r.ScanTime.UTC().Format("2006-01-02 15:04:05 UTC"))
 	}
@@ -70,6 +71,11 @@ func emitHuman(out io.Writer, r model.Report) error {
 		line("%s  %s  (%s)", statusLabel(result.Status), label, terminal(result.ID))
 		line("  Executable: %s", valueOr(result.Executable, "not available"))
 		line("  Version: %s", valueOr(result.RuntimeVersion, "not observed"))
+		if result.AssessmentBasis == "configured_client" {
+			line("  Tested: client with supplied trust settings. Application behavior: UNKNOWN.")
+		} else {
+			line("  Tested: client defaults. Application behavior: UNKNOWN.")
+		}
 		for _, source := range result.TrustSources {
 			if source.Complete {
 				line("  Trust file: %s", valueOr(source.Path, "path not reported"))
@@ -82,7 +88,7 @@ func emitHuman(out io.Writer, r model.Report) error {
 	}
 	line("")
 	if r.Coverage.Complete {
-		line("Coverage: complete for the declared scope only.")
+		line("Coverage: all declared client configurations listed; application behavior remains unverified.")
 	} else {
 		line("Coverage: incomplete. This report does not clear the whole machine.")
 	}
@@ -98,7 +104,7 @@ func emitHuman(out io.Writer, r model.Report) error {
 	if r.Mode == "inventory" {
 		line("\nNext: run emudhraslop check --online to test these clients.")
 	} else if affected > 0 {
-		line("\nNext: update the affected clients' runtime/trust settings, restart the affected apps, and rerun the same check.")
+		line("\nNext: update the affected clients' runtime/trust settings, restart services that use those settings, and rerun the same check.")
 		line("An affected result shows trust exposure; it does not prove that an attack occurred.")
 	}
 	if r.Mode == "cached" {

@@ -106,7 +106,7 @@ func Load(path, version, manifestHash, configurationHash string, maxAge time.Dur
 		return model.Report{}, ErrInvalid
 	}
 	now := time.Now()
-	if report.SchemaVersion != 1 || report.Version != version || report.ManifestSHA256 != manifestHash || report.ConfigurationSHA256 != configurationHash || report.ScanTime.IsZero() || report.ScanTime.After(now) || now.Sub(report.ScanTime) > maxAge || len(report.Results) == 0 {
+	if !report.ValidAssessmentScope() || report.Version != version || report.ManifestSHA256 != manifestHash || report.ConfigurationSHA256 != configurationHash || report.ScanTime.IsZero() || report.ScanTime.After(now) || now.Sub(report.ScanTime) > maxAge || len(report.Results) == 0 {
 		return model.Report{}, ErrInvalid
 	}
 	if report.Status != model.Affected && report.Status != model.Unknown {

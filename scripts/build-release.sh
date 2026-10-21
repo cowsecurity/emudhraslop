@@ -3,7 +3,7 @@ set -eu
 cd "$(dirname "$0")/.."
 GO=${GO:-go}
 PYTHON=${PYTHON:-python3}
-VERSION=${VERSION:-0.1.0-dev}
+VERSION=${VERSION:-0.3.0-dev}
 if [ "$(uname -s)" = Darwin ]; then
   default_targets='darwin/amd64 darwin/arm64 linux/amd64 linux/arm64 linux/arm/v7 windows/amd64 windows/arm64'
 else

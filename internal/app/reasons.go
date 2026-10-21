@@ -24,7 +24,7 @@ func humanReason(reason string) string {
 		return "This application or its TLS settings cannot be checked by the available adapters."
 	case "clean_control_failed":
 		return "The normal HTTPS control connection failed; network, proxy or trust settings need investigation."
-	case "root_probe_denied", "root_package_import_denied":
+	case "root_probe_denied", "root_package_import_denied", "root_python_execution_denied":
 		return "The probe was refused because it would execute a client with elevated privileges."
 	case "native_execution_unavailable", "runtime_probe_failed":
 		return "The native client could not run successfully."
@@ -38,6 +38,14 @@ func humanReason(reason string) string {
 		return "The client has environment or proxy settings that this checker cannot safely reproduce."
 	case "unsupported_python_client", "unsupported_node_client":
 		return "This TLS client needs an adapter that can verify the peer certificate identity."
+	case "package_unavailable":
+		return "This optional HTTP client library is not available in the selected Python environment."
+	case "unsupported_client":
+		return "The selected runtime does not expose the client features required for this check."
+	case "unsupported_configuration", "unsupported_node_fetch_ca_configuration":
+		return "This adapter cannot reproduce the supplied trust settings; this client remains unknown."
+	case "trust_source_unreadable":
+		return "The client's trust source could not be read."
 	case "unsupported_node_ca_directory", "apple_custom_trust_context_unsupported", "unsupported_exclusive_ca_bundle_context":
 		return "The declared trust configuration is not supported by this probe."
 	case "apple_trust_unavailable_on_platform":
@@ -73,10 +81,10 @@ func humanReason(reason string) string {
 func humanAdvice(r model.Result) string {
 	switch r.Reason {
 	case "inventory_only", "offline_native_policy_not_proven", "curl_requires_online_native_probe":
-		return "Run emudhraslop check --online with the same service manifest, if one was supplied."
+		return "Run emudhraslop check --online with the same --project or --services selection, if one was supplied."
 	case "native_rejections_do_not_prove_protection", "clean_control_failed":
 		return "Check this client's network, proxy and trust settings. Use --agent for per-certificate evidence; do not treat a failed connection as protection."
-	case "root_probe_denied", "root_package_import_denied":
+	case "root_probe_denied", "root_package_import_denied", "root_python_execution_denied":
 		return "Run as the ordinary user or service account that runs this application."
 	case "native_execution_unavailable", "runtime_probe_failed", "invalid_probe_response":
 		return "Check that the listed executable and TLS client are available to this user, then rerun."

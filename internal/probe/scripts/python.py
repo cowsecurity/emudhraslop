@@ -18,6 +18,8 @@ def source(path):
 
 def classify(error):
     # Exception messages may contain proxy credentials and must never be emitted.
+    hostname_module = sys.modules.get("urllib3.util.ssl_match_hostname")
+    hostname_error = getattr(hostname_module, "CertificateError", ssl.CertificateError)
     pending = [error]
     seen = set()
     while pending and len(seen) < 16:
@@ -25,29 +27,61 @@ def classify(error):
         if id(item) in seen:
             continue
         seen.add(id(item))
-        if isinstance(item, (ssl.SSLCertVerificationError, ssl.CertificateError)):
+        if isinstance(item, (ssl.SSLCertVerificationError, ssl.CertificateError, hostname_error)):
             return "certificate_rejected"
         if isinstance(item, (TimeoutError, socket.timeout)):
             return "timeout"
-        for value in (getattr(item, "__cause__", None), getattr(item, "__context__", None)):
+        for value in (getattr(item, "__cause__", None), getattr(item, "__context__", None),
+                      getattr(item, "reason", None), getattr(item, "kwargs", {}).get("error"),
+                      *getattr(item, "args", ())):
             if isinstance(value, BaseException):
                 pending.append(value)
     return "network_error"
 
 
+async def aiohttp_peer(aiohttp, address, context, timeout):
+    # aiohttp can release an empty response before ClientSession.get returns.
+    # Capture the peer on the response's own verified connection before that
+    # release; never open a second TLS connection or override validation.
+    class PeerResponse(aiohttp.ClientResponse):
+        async def start(self, connection, *args, **kwargs):
+            transport = connection.transport
+            secure = transport.get_extra_info("ssl_object") if transport else None
+            self.checked_peer = secure.getpeercert(True) if secure else None
+            return await super().start(connection, *args, **kwargs)
+
+    async with aiohttp.ClientSession(
+        response_class=PeerResponse, trust_env=False,
+        cookie_jar=aiohttp.DummyCookieJar(),
+        timeout=aiohttp.ClientTimeout(total=timeout),
+        auto_decompress=False,
+    ) as session:
+        async with session.get(address, ssl=context or True, allow_redirects=False) as response:
+            return response.checked_peer
+
+
 def probe(config, result):
     client = config["client"]
     bundle, directory = config["ca_bundle"], config["ca_dir"]
+    if client == "requests" and bundle and directory:
+        result["error_class"] = "unsupported_configuration"
+        return
     verify = bundle or directory or True
     context = None
-    if client == "stdlib" or (client == "httpx" and (bundle or directory)):
+    if client == "stdlib" or (client in ("httpx", "aiohttp") and (bundle or directory)):
         context = ssl.create_default_context(cafile=bundle or None, capath=directory or None)
     if bundle or directory:
         result["sources"] = [source(value) for value in (bundle, directory) if value]
-    elif client == "stdlib":
+    elif client in ("stdlib", "urllib3", "aiohttp"):
         defaults = ssl.get_default_verify_paths()
         result["sources"] = [source(value) for value in (defaults.cafile, defaults.capath) if value]
-    if client == "requests":
+    if client == "aiohttp":
+        import aiohttp
+        result["version"] += "; aiohttp " + aiohttp.__version__
+    elif client == "urllib3":
+        import urllib3
+        result["version"] += "; urllib3 " + urllib3.__version__
+    elif client == "requests":
         import requests
         result["version"] += "; requests " + requests.__version__
         if not bundle and not directory:
@@ -84,12 +118,22 @@ def probe(config, result):
                 peer = secure.getpeercert(True)
     elif client == "requests":
         # Fresh Session, isolated HOME, no supplied auth/cookies, no redirects.
-        with requests.Session() as session:
-            with session.get(address, timeout=timeout, verify=verify, stream=True, allow_redirects=False) as response:
-                connection = getattr(response.raw, "connection", None)
-                secure = getattr(connection, "sock", None)
-                if secure is not None:
-                    peer = secure.getpeercert(True)
+        class NoRedirectSession(requests.Session):
+            def resolve_redirects(self, *args, **kwargs):
+                # Even allow_redirects=False normally prepares the next request
+                # and buffers this response's body. Neither is needed here.
+                return iter(())
+
+        def capture_peer(response, *args, **kwargs):
+            nonlocal peer
+            secure = getattr(getattr(response.raw, "connection", None), "sock", None)
+            if secure is not None:
+                peer = secure.getpeercert(True)
+        # Capture on the library's response before a connection can be released.
+        with NoRedirectSession() as session:
+            with session.get(address, timeout=timeout, verify=verify, stream=True,
+                             allow_redirects=False, hooks={"response": capture_peer}):
+                pass
     elif client == "httpx":
         with httpx.Client(verify=context or verify, timeout=timeout, follow_redirects=False) as session:
             with session.stream("GET", address) as response:
@@ -110,6 +154,24 @@ def probe(config, result):
                 response.raw.close()
         finally:
             session.close()
+    elif client == "urllib3":
+        # PoolManager's native defaults are direct connections, system trust,
+        # and certificate/hostname verification. No retry or redirect egress.
+        with urllib3.PoolManager(
+            cert_reqs=ssl.CERT_REQUIRED, ca_certs=bundle or None,
+            ca_cert_dir=directory or None, timeout=timeout, retries=False,
+        ) as session:
+            response = session.request("GET", address, preload_content=False, redirect=False, retries=False)
+            try:
+                secure = getattr(getattr(response, "connection", None), "sock", None)
+                if secure is not None:
+                    peer = secure.getpeercert(True)
+            finally:
+                response.close()
+                response.release_conn()
+    elif client == "aiohttp":
+        import asyncio
+        peer = asyncio.run(aiohttp_peer(aiohttp, address, context, timeout))
     if peer:
         result.update(accepted=True, leaf_sha256=hashlib.sha256(peer).hexdigest())
     else:

@@ -50,8 +50,8 @@ func TestManagedDiscoveryDeduplicatesSymlinksWithoutExecutingThem(t *testing.T) 
 			}
 		}
 	}
-	if found != 1 {
-		t.Fatalf("expected one context for alias pair, got %d", found)
+	if found != len(pythonClients) {
+		t.Fatalf("expected one context per Python client for alias pair, got %d", found)
 	}
 	if _, err := os.Stat(marker); !os.IsNotExist(err) {
 		t.Fatal("inventory executed discovered program")

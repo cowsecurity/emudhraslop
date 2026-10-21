@@ -21,11 +21,11 @@ The [quick install](../README.md#install) selects the platform and verifies its 
 To pin a version or choose a destination:
 
 ```sh
-sh emudhraslop-install.sh --version 0.2.0 --bin-dir "$HOME/.local/bin"
+sh emudhraslop-install.sh --version 0.3.0 --bin-dir "$HOME/.local/bin"
 ```
 
 ```powershell
-.\emudhraslop-install.ps1 -Version 0.2.0 -BinDir "$env:LOCALAPPDATA\emudhraslop\bin"
+.\emudhraslop-install.ps1 -Version 0.3.0 -BinDir "$env:LOCALAPPDATA\emudhraslop\bin"
 ```
 
 The installers are also published as `install.sh` and `install.ps1`, with hashes in `SHA256SUMS`. Mac installation includes the adjacent native trust helper. The installer prints an absolute command that works without changing `PATH`.
@@ -37,7 +37,7 @@ These optional manual commands use the GitHub CLI (`gh`). You can also download 
 Choose a target from the table above. This example downloads the Apple Silicon build; change `target` to `darwin-amd64`, `linux-amd64`, `linux-arm64`, or `linux-arm-v7` as needed. Run in a new directory:
 
 ```sh
-version=0.2.0
+version=0.3.0
 target=darwin-arm64
 archive="emudhraslop-${version}-${target}.tar.gz"
 mkdir "emudhraslop-${version}-${target}"
@@ -75,7 +75,7 @@ Use a non-Administrator PowerShell window with the GitHub CLI installed. Set `$t
 
 ```powershell
 $ErrorActionPreference = 'Stop'
-$version = '0.2.0'
+$version = '0.3.0'
 $target = 'windows-amd64'
 $archive = "emudhraslop-$version-$target.zip"
 New-Item -ItemType Directory "emudhraslop-$version-$target" | Out-Null
@@ -104,19 +104,19 @@ Windows builds are unsigned. Run as the application's normal account. Use `--no-
 
 `SHA256SUMS` checks that the download matches the published archive. It is not a publisher signature. `RELEASE-MANIFEST.json` records the version, target and payload hashes. Keep both with the archive if you need to reproduce an assessment.
 
-For a precise application check, create a [service file](../README.md#check-an-application). For containers, extract the Linux archive on your workstation or build machine, then [copy the binary into the application image](../README.md#check-a-container).
+For a precise application check, create a [service file](../README.md#check-a-configured-client). For containers, extract the Linux archive on your workstation or build machine, then [copy the binary into the application image](../README.md#check-a-container).
 
 ## Build archives
 
 Build prerequisites are Go 1.27.3, Python 3.9+, and a POSIX shell. Mac releases also need Xcode command-line tools with Swift. There are no third-party Go or Python build dependencies.
 
 ```sh
-VERSION=0.2.0 TARGETS='linux/amd64 linux/arm64 linux/arm/v7 windows/amd64 windows/arm64' make release
-VERSION=0.2.0 TARGETS='darwin/amd64 darwin/arm64' make release
+VERSION=0.3.0 TARGETS='linux/amd64 linux/arm64 linux/arm/v7 windows/amd64 windows/arm64' make release
+VERSION=0.3.0 TARGETS='darwin/amd64 darwin/arm64' make release
 ```
 
-Run the second command on macOS. A Mac host defaults to every listed target; other hosts default to Linux and Windows. Each archive contains the platform executable, an Apple helper on Mac, selected docs/examples, and `RELEASE-MANIFEST.json` with payload hashes and platform limitations. Existing archives are never overwritten. Remove only intentionally disposable local output before rebuilding the same version.
+Run the second command on macOS. A Mac host defaults to every listed target; other hosts default to Linux and Windows. Each archive contains the platform executable, an Apple helper on Mac, selected docs/examples, and `RELEASE-MANIFEST.json` with payload hashes and platform limitations. Mac archives also include `scripts/jamf-extension-attribute.sh` and `examples/jamf/io.emudhraslop.scan.plist`, with their hashes in the manifest. Existing archives are never overwritten. Remove only intentionally disposable local output before rebuilding the same version.
 
-`dist/releases/SHA256SUMS` covers that build's versioned archives. `dist/SHA256SUMS` also covers raw binaries and an optional local Jamf package. Release assembly uses explicit file allowlists; service credentials, scan reports, user manifests, private keys, and fleet-specific Jamf configuration are not included. `build-jamf-package.sh` remains a separate operator step requiring a reviewed service manifest.
+`dist/releases/SHA256SUMS` covers that build's versioned archives. `dist/SHA256SUMS` also covers raw binaries and an optional local Jamf package. Release assembly uses explicit file allowlists; service credentials, scan reports, user manifests, private keys, and fleet-specific Jamf configuration are not included. `scripts/build-jamf-package.sh` is a separate source-checkout operation: it requires both `dist/darwin-amd64` and `dist/darwin-arm64` build outputs plus a reviewed service manifest. It does not run from an extracted platform archive. Follow [Jamf deployment](jamf.md) to choose identities, scan mode, signing, and pilot validation before fleet rollout.
 
 Tagged versions use `vMAJOR.MINOR.PATCH` or a SemVer prerelease. Published asset filenames omit the leading `v`. Release automation checks the exact platform set, hashes, archive payload identities, and existing asset names before publishing. A checksum file is not a signature or notarization claim.

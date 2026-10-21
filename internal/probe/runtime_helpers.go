@@ -53,12 +53,8 @@ func validateRuntimeEnvironment(environment map[string]string, kind string) erro
 			return errors.New("verification_disabled")
 		}
 		if key == "NODE_OPTIONS" {
-			for _, flag := range strings.Fields(value) {
-				switch flag {
-				case "--use-openssl-ca", "--use-bundled-ca", "--use-system-ca", "--no-use-system-ca":
-				default:
-					return errors.New("unsupported_node_options")
-				}
+			if err := run.ValidateNodeOptions(value); err != nil {
+				return errors.New("unsupported_node_options")
 			}
 		}
 		if kind == "node" && strings.Contains(strings.ToLower(key), "proxy") && value != "" {
@@ -108,9 +104,12 @@ func runtimeProbe(ctx context.Context, t model.Target, inc *incident.Incident, o
 		r.Reason = "verification_disabled"
 		return r
 	}
-	if t.Kind == "python" && os.Geteuid() == 0 && (t.UID == nil || *t.UID == 0) && t.Client != "stdlib" && t.Client != "" {
-		r.Reason = "root_package_import_denied"
-		r.NextAction = "Run the package client probe as its non-root service uid/gid."
+	// Even -I -S imports Python's startup modules. A trusted executable path
+	// does not attest pyvenv.cfg, its selected stdlib, or other startup files.
+	// Root opt-in therefore cannot authorize any Python interpreter execution.
+	if t.Kind == "python" && os.Geteuid() == 0 && (t.UID == nil || *t.UID == 0 || t.GID == nil || *t.GID == 0) {
+		r.Reason = "root_python_execution_denied"
+		r.NextAction = "Run Python probes as an explicit non-root service uid/gid."
 		return r
 	}
 	if t.Kind == "python" && (t.Client == "stdlib" || t.Client == "botocore") {
@@ -131,6 +130,15 @@ func runtimeProbe(ctx context.Context, t model.Target, inc *incident.Incident, o
 		return r
 	}
 	r.RuntimeVersion, r.TrustSources = control.Version, control.Sources
+	// An unavailable adapter cannot make any incident-chain request. Keep the
+	// context visible as unknown without repeating the same failed import for
+	// every chain. Network/control failures still proceed to incident probes.
+	switch control.ErrorClass {
+	case "package_unavailable", "unsupported_client", "unsupported_configuration", "trust_source_unreadable":
+		r.Reason = control.ErrorClass
+		r.NextAction = "Select the application's actual installed client and readable trust settings; the scanner does not install packages."
+		return r
+	}
 	if !opts.Online {
 		r.Reason = "offline_native_policy_not_proven"
 		return r

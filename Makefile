@@ -1,5 +1,5 @@
 GO ?= go
-VERSION ?= 0.1.0-dev
+VERSION ?= 0.3.0-dev
 PYTHON ?= python3
 CONTAINER_ENGINE ?= docker
 
@@ -20,6 +20,7 @@ release:
 
 test-containers:
 	GO="$(GO)" CONTAINER_ENGINE="$(CONTAINER_ENGINE)" ./scripts/container-smoke.sh
+	GO="$(GO)" CONTAINER_ENGINE="$(CONTAINER_ENGINE)" $(PYTHON) ./scripts/container-native-tests.py
 
 test-root-containers:
 	GO="$(GO)" CONTAINER_ENGINE="$(CONTAINER_ENGINE)" ./scripts/root-container-tests.sh

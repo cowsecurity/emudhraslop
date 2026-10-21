@@ -143,13 +143,6 @@ func TestOfflineNativeEvidenceCannotBecomeProtection(t *testing.T) {
 	}
 }
 
-func TestUnsupportedFetchDoesNotMasqueradeAsTLSContext(t *testing.T) {
-	result := Node(context.Background(), model.Target{Kind: "node", Client: "fetch", Executable: "/not/executed"}, &incident.Incident{}, Options{})
-	if result.Status != model.Unknown || result.Reason != "unsupported_node_client" {
-		t.Fatalf("fetch coverage falsely implied: %+v", result)
-	}
-}
-
 func TestNativeAcceptanceWithoutExactFixturePinIsNeverAffectedEvidence(t *testing.T) {
 	expected := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 	for _, observation := range []runtimeObservation{
@@ -162,6 +155,23 @@ func TestNativeAcceptanceWithoutExactFixturePinIsNeverAffectedEvidence(t *testin
 	} {
 		if runtimePinnedAcceptance(observation, expected) {
 			t.Fatalf("non-attributed observation became incident evidence: %+v", observation)
+		}
+	}
+}
+
+func TestMissingClientRemainsVisibleWithoutRepeatedIncidentProbes(t *testing.T) {
+	target := nativeTestTarget(t, "python", "requests")
+	in, err := incident.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, online := range []bool{false, true} {
+		// -S hides installed packages in the actual interpreter. This exercises
+		// a real failed import, not a substitute subprocess result.
+		result := runtimeProbe(context.Background(), target, in,
+			Options{Online: online, ProbeTimeout: 3 * time.Second, MaxOutput: 65536}, pythonScript, []string{"-I", "-S", "-c"})
+		if result.Status != model.Unknown || result.Reason != "package_unavailable" || len(result.Checks) != 0 || result.RuntimeVersion == "" {
+			t.Fatalf("missing dependency hidden or repeatedly probed: %+v", result)
 		}
 	}
 }

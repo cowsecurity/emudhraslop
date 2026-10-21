@@ -18,7 +18,16 @@ kubectl exec deployment/application -- /usr/local/bin/emudhraslop check \
   --offline --services /etc/emudhraslop/services.json --no-cache --json
 ```
 
-The service manifest must describe this image and user. Set its executable and CA paths to paths inside the container. Record the deployed immutable image digest from your deployment system. The checker does not need a mounted host filesystem, Docker socket, privileged mode, Linux capabilities, or access to another container's namespace.
+For an image with a Python project, a manifest is optional for checking defaults:
+
+```sh
+docker exec application /usr/local/bin/emudhraslop check \
+  --online --project /app --agent
+```
+
+Use `--services` to reproduce explicit CA settings and choose a particular HTTP client. Python project discovery covers the selected root and `.venv`, `venv`, and `env`, with stdlib, Requests, HTTPX, Botocore, urllib3, and aiohttp checks. Managed Node discovery checks TLS, HTTPS, and built-in fetch. Missing packages stay unknown; the scan never installs them.
+
+The service manifest must describe this image and user. Set its executable and CA paths to paths inside the container. Record the deployed immutable image digest from your deployment system. Reports assess client configurations and always retain `application_status: unknown`; no running application or listening port is tested. The checker does not need a mounted host filesystem, Docker socket, privileged mode, Linux capabilities, or access to another container's namespace.
 
 ## Root and filesystem rules
 

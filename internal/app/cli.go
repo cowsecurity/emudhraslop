@@ -23,6 +23,7 @@ import (
 type flags struct {
 	json, agent, online, offline, cached, allowRoot, noCache bool
 	services, cache, scope, incident                         string
+	projects                                                 projectPaths
 	timeout, probeTimeout, maxAge                            time.Duration
 	jobs                                                     int
 }
@@ -58,6 +59,7 @@ func parse(args []string, stderr io.Writer) (string, flags, error) {
 	fs.BoolVar(&f.cached, "cached", false, "validate a previous result without executing client probes")
 	fs.BoolVar(&f.allowRoot, "allow-root-probes", false, "allow reviewed root-owned managed runtime execution as root")
 	fs.StringVar(&f.services, "services", "", "strict JSON service manifest")
+	fs.Var(&f.projects, "project", "include Python environments in this project directory (repeatable; no recursive search)")
 	fs.StringVar(&f.cache, "cache", "", "opt in to saving a report at this path; also selects the --cached input")
 	fs.StringVar(&f.scope, "scope", "managed", "managed runtime discovery")
 	fs.StringVar(&f.incident, "incident", "emudhra-2026", "embedded incident ID")
@@ -86,6 +88,9 @@ func parse(args []string, stderr io.Writer) (string, flags, error) {
 	if f.noCache && (f.cached || f.cache != "") {
 		return command, f, errors.New("--no-cache cannot be combined with cache options")
 	}
+	if len(f.projects) != 0 && f.services != "" {
+		return command, f, errors.New("choose project discovery or a service manifest")
+	}
 	if modes > 1 {
 		return command, f, errors.New("choose one of --online, --offline, --cached")
 	}
@@ -99,6 +104,9 @@ func parse(args []string, stderr io.Writer) (string, flags, error) {
 }
 
 func Run(args []string, stdout, stderr io.Writer) int {
+	if len(args) > 0 && args[0] == "observation" {
+		return RunObservation(args[1:], stdout, stderr)
+	}
 	if len(args) == 0 || (len(args) == 1 && (args[0] == "--help" || args[0] == "-h" || args[0] == "help")) {
 		if _, err := fmt.Fprint(stdout, quickstart); err != nil {
 			return 1
@@ -124,9 +132,9 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "emudhraslop: embedded incident integrity validation failed")
 		return 1
 	}
-	targets, coverage, err := loadTargets(f.services)
+	targets, coverage, err := loadProjectTargets(f.services, f.projects)
 	if err != nil {
-		fmt.Fprintln(stderr, "emudhraslop: service manifest cannot be read or is invalid")
+		fmt.Fprintln(stderr, "emudhraslop: service manifest or project directory cannot be read or is invalid")
 		return 1
 	}
 	configuration, fpErr := config.Fingerprint(targets)
@@ -225,7 +233,7 @@ func loadTargets(path string) ([]model.Target, model.Coverage, error) {
 		path = absolute
 	}
 	t, err := config.Load(path)
-	c := model.Coverage{Scope: "declared-services", Complete: true, Exclusions: []string{"Applications and client contexts absent from the service manifest are not assessed.", "Code signing, inbound server certificates and incident paths absent from the embedded manifest are not assessed."}, Warnings: []string{}}
+	c := model.Coverage{Scope: "declared-clients", Complete: true, Exclusions: []string{"Running application behavior is not assessed; declared client settings are tested in isolation.", "Applications and client contexts absent from the service manifest are not assessed.", "Code signing, inbound server certificates and incident paths absent from the embedded manifest are not assessed."}, Warnings: []string{}}
 	if runtime.GOOS == "windows" {
 		c.Warnings = append(c.Warnings, "Windows checks use the current non-elevated token only; uid/gid 4294967295 is an unsupported Unix placeholder, not a Windows SID; report caching is unsupported; fresh checks do not use a cache")
 	}
@@ -238,7 +246,7 @@ func loadTargets(path string) ([]model.Target, model.Coverage, error) {
 }
 
 func emptyReport(in *incident.Incident, c model.Coverage, mode string) model.Report {
-	return model.Report{SchemaVersion: 1, Version: Version, Incident: in.ID, ManifestVersion: in.Version, ManifestSHA256: in.SHA256, ScanTime: time.Now().UTC(), Status: model.Unknown, Mode: mode, Coverage: c, Results: []model.Result{}, Errors: []string{}}
+	return model.Report{SchemaVersion: model.SchemaVersion, AssessmentScope: "client_configurations", ApplicationStatus: model.Unknown, Version: Version, Incident: in.ID, ManifestVersion: in.Version, ManifestSHA256: in.SHA256, ScanTime: time.Now().UTC(), Status: model.Unknown, Mode: mode, Coverage: c, Results: []model.Result{}, Errors: []string{}}
 }
 
 // Null means the available evidence does not establish either answer.

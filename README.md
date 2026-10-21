@@ -42,9 +42,9 @@ On Windows:
 & "$env:LOCALAPPDATA\emudhraslop\bin\emudhraslop.exe" check --online
 ```
 
-If `emudhraslop` is already on your `PATH`, use `emudhraslop check --online`. To update, run the installer again. For automation, pin a release with `sh emudhraslop-install.sh --version 0.2.0` or `.\emudhraslop-install.ps1 -Version 0.2.0`.
+If `emudhraslop` is already on your `PATH`, use `emudhraslop check --online`. To update, run the installer again. For automation, pin a release with `sh emudhraslop-install.sh --version 0.3.0` or `.\emudhraslop-install.ps1 -Version 0.3.0`.
 
-This discovers supported runtimes in managed locations and on `PATH`, then checks them. `--online` contacts fixed public incident test hosts and a clean control. Add `--agent` for machine-readable output without cache reads or writes. Use `--offline` instead if network calls are not permitted; offline checks often return `unknown`.
+This discovers supported runtimes in managed locations and on `PATH`, then checks each supported client. Python checks cover stdlib SSL, Requests, HTTPX, Botocore, urllib3, and aiohttp. Node checks cover TLS, HTTPS, and built-in fetch. A missing library is reported as unknown; the checker never installs it. `--online` contacts fixed public incident test hosts and a clean control. Add `--agent` for machine-readable output without cache reads or writes. Use `--offline` instead if network calls are not permitted; offline checks often return `unknown`.
 
 To list discovered runtimes without testing them:
 
@@ -52,11 +52,17 @@ To list discovered runtimes without testing them:
 emudhraslop inventory --agent
 ```
 
-Discovery does not cover every app, virtual environment, or service. It cannot return a whole-machine all-clear. Use a service file for the configurations you need to assess.
+To include a Python project's virtual environment:
+
+```sh
+emudhraslop check --online --project /path/to/project
+```
+
+The project scan checks that directory and its `.venv`, `venv`, and `env` locations. You can pass a virtual environment directory directly and repeat `--project` for additional projects. Run as the environment's owner. Discovery does not inspect running processes, listeners, application code, arbitrary nested environments, or containers. It cannot return a whole-machine all-clear.
 
 ## Read the result
 
-The report shows the executable path, runtime version when available, what the check found, and a next step for each client. Multiple Python or OpenSSL installations appear separately. A runtime finding does not establish that every application using that runtime has the same TLS configuration.
+The report shows the executable path, runtime version when available, what the check found, and a next step for each client. Multiple Python or OpenSSL installations appear separately. Every report says `assessment_scope: client_configurations` and `application_status: unknown`. A result describes a fresh client process, not a running application, listening port, or browser. Client defaults and explicitly configured clients are labeled separately.
 
 | Status | Meaning | What to do | Exit code |
 | --- | --- | --- | --- |
@@ -68,7 +74,7 @@ Check exit codes are **2** for affected, **0** for not affected, **3** for unkno
 
 **`not_affected` currently requires an explicitly declared OpenSSL 3 configuration using one exclusive CA file.** Other clients can confirm affected status, but a rejected connection alone does not prove they are unaffected. The result applies to the tested configuration, not every service on the machine. See [supported checks](docs/coverage.md) and [negative-proof requirements](docs/negative-proof.md).
 
-## Check an application
+## Check a configured client
 
 Create `services.json` with the application's actual runtime and TLS client. This example checks Python Requests and Node HTTPS; replace the paths and remove entries you do not use:
 
@@ -104,7 +110,7 @@ Use the Python executable from the application's virtual environment so the chec
 & "$env:LOCALAPPDATA\emudhraslop\bin\emudhraslop.exe" check --online --services services.json
 ```
 
-If the application explicitly passes a CA file to its client, set `"ca_bundle": "/etc/company/ca.pem"`. For Node, this replaces the default CA list. If Node instead extends its defaults using `NODE_EXTRA_CA_CERTS`, declare `"environment": {"NODE_EXTRA_CA_CERTS": "/etc/company/ca.pem"}`. For Requests configured through the environment, use `"environment": {"REQUESTS_CA_BUNDLE": "/etc/company/ca.pem"}`. Copy the application's actual settings; a service-file scan does not inherit the shell's trust overrides. Do not include tokens or passwords. Custom TLS contexts created inside application code need a separate assessment.
+If the application explicitly passes a CA file to its client, set `"ca_bundle": "/etc/company/ca.pem"`. For Node, this replaces the default CA list. If Node instead extends its defaults using `NODE_EXTRA_CA_CERTS`, declare `"environment": {"NODE_EXTRA_CA_CERTS": "/etc/company/ca.pem"}`. For Requests configured through the environment, use `"environment": {"REQUESTS_CA_BUNDLE": "/etc/company/ca.pem"}`. Copy the application's actual settings; a service-file scan does not inherit the shell's trust overrides. Do not include tokens or passwords. Custom TLS contexts created inside application code need a separate assessment. Even with a service file, `application_status` remains `unknown`: the checker does not execute or instrument the application.
 
 Omitting `uid` and `gid` uses the current account. For Unix services that require a different identity, see [container identity rules](docs/containers.md#root-and-filesystem-rules). Windows supports only the current non-elevated account. [Example manifests](examples/) cover additional configurations.
 
@@ -145,7 +151,7 @@ code=0
 emudhraslop check --online --services services.json --agent \
   > report.json || code=$?
 case "$code" in
-  0) echo 'Declared configuration is not affected' ;;
+  0) echo 'Tested client configurations are not affected' ;;
   2) echo 'Affected configuration found' ;;
   3) echo 'Could not confirm; review report.json' ;;
   *) echo 'Check failed; inspect stderr' >&2 ;;
@@ -153,11 +159,11 @@ esac
 exit "$code"
 ```
 
-This is a script for a CI step; its final line preserves the scan outcome. JSON has `schema_version`, overall `status`, nullable `affected`, and per-client `results` with `reason` and `next_action`. Validate against the [report schema](docs/report.schema.json) before making an automated decision. `affected: null` means unknown; never convert it to `false`. Keep per-client results even when the overall status is affected.
+This is a script for a CI step; its final line preserves the scan outcome. JSON report schema **2** has `assessment_scope`, `application_status`, overall `status`, nullable `affected`, and per-client `results` with `assessment_basis`, `reason`, and `next_action`. Service manifests still use schema **1**. Validate against the [report schema](docs/report.schema.json) before making an automated decision. `affected: null` means unknown; never convert it to `false`. Keep per-client results even when the overall status is affected.
 
 Checks save no cache unless you supply `--cache FILE`.
 
-See [agent integration](docs/agents.md) for validation and timeout handling, or [Jamf integration](docs/jamf.md) for scheduled Mac scans and cached inventory attributes.
+See [agent integration](docs/agents.md) for validation and timeout handling, or [Jamf integration](docs/jamf.md) for scheduled Mac scans and historical inventory attributes. A Jamf observation is the last saved result, not a fresh protection assessment.
 
 ## Build from source
 
@@ -169,6 +175,6 @@ make build
 make test
 ```
 
-For macOS native trust checks, use the release archive with its bundled helper, or build it on a Mac with Swift using `make release VERSION=0.2.0`. See [release builds](docs/releases.md#build-archives) for prerequisites and target selection.
+For macOS native trust checks, use the release archive with its bundled helper, or build it on a Mac with Swift using `make release VERSION=0.3.0`. See [release builds](docs/releases.md#build-archives) for prerequisites and target selection.
 
 [Security design](docs/security.md) documents probe isolation and input handling. Embedded incident fixtures contain public certificates only.

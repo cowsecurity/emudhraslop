@@ -52,7 +52,7 @@ func TestAgentForcesJSONAndNoCacheWithoutEnablingNetwork(t *testing.T) {
 		if err := json.Unmarshal(out.Bytes(), &report); err != nil {
 			t.Fatal(err)
 		}
-		if report.SchemaVersion != 1 || report.Affected != nil || len(report.Results) != 1 || report.Results[0].Affected != nil || report.Mode == "online" || len(report.Errors) != 0 {
+		if report.SchemaVersion != model.SchemaVersion || !report.ValidAssessmentScope() || report.Affected != nil || len(report.Results) != 1 || report.Results[0].Affected != nil || report.Mode == "online" || len(report.Errors) != 0 {
 			t.Fatalf("agent changed decision or performed unexpected work: %+v", report)
 		}
 	}

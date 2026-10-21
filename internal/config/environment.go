@@ -21,12 +21,8 @@ func ValidateEnvironment(env map[string]string) error {
 		}
 		switch key {
 		case "NODE_OPTIONS":
-			for _, flag := range strings.Fields(value) {
-				switch flag {
-				case "--use-system-ca", "--use-bundled-ca", "--use-openssl-ca", "--no-use-system-ca", "--no-use-bundled-ca", "--no-use-openssl-ca":
-				default:
-					return errors.New("NODE_OPTIONS contains unsupported execution options")
-				}
+			if err := run.ValidateNodeOptions(value); err != nil {
+				return err
 			}
 		case "NODE_TLS_REJECT_UNAUTHORIZED":
 			if value != "0" && value != "1" {

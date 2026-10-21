@@ -6,9 +6,7 @@
       "kind": "python",
       "client": "stdlib",
       "executable": "/usr/local/bin/python3",
-      "source": "Container smoke fixture",
-      "uid": 10001,
-      "gid": 10001
+      "source": "Replace with this image and service configuration"
     }
   ]
 }

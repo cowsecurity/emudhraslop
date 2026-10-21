@@ -32,6 +32,14 @@ DOCUMENTS = [
     "docs/containers.md", "docs/jamf.md",
 ]
 
+JAMF_FILES = [
+    "scripts/jamf-extension-attribute.sh", "examples/jamf/io.emudhraslop.scan.plist",
+]
+
+
+def source_files(target):
+    return DOCUMENTS + (JAMF_FILES if target.startswith("darwin/") else [])
+
 
 def configuration(version, targets):
     if len(version) > 128 or not SEMVER.fullmatch(version):
@@ -89,8 +97,9 @@ def payload(version, target):
         if not binary_matches(helper, target):
             raise ValueError("Apple helper header does not match target: " + target)
         contents["emudhraslop-sectrust"] = (helper, 0o555)
-    for name in DOCUMENTS:
-        contents[name] = (read_regular(ROOT / name), 0o444)
+    for name in source_files(target):
+        mode = 0o555 if name.endswith(".sh") else 0o444
+        contents[name] = (read_regular(ROOT / name), mode)
     windows = target.startswith("windows/")
     manifest = {
         "schema_version": 1, "name": "emudhraslop", "version": version,
@@ -98,7 +107,7 @@ def payload(version, target):
         "apple_native_helper": target.startswith("darwin/"),
         "windows_limitations": (["non-elevated execution only", "no native Windows trust adapter",
                                   "cache unavailable"] if windows else []),
-        "assessment_contract": "affected / not_affected / unknown; see docs/coverage.md",
+        "assessment_contract": "client configurations only; application status unknown; report schema 2",
         "publisher_signed": False,
         "files": {name: hashlib.sha256(data).hexdigest()
                   for name, (data, _) in sorted(contents.items())},
@@ -131,7 +140,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--validate-only", action="store_true")
     args = parser.parse_args()
-    version = os.environ.get("VERSION", "0.1.0-dev")
+    version = os.environ.get("VERSION", "0.3.0-dev")
     targets = os.environ.get("TARGETS", "").split()
     configuration(version, targets)
     if args.validate_only:
