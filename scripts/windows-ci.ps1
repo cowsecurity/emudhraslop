@@ -67,6 +67,9 @@ try {
         $start.RedirectStandardError = $true
         $start.Environment.Clear()
         $start.Environment['SystemRoot'] = $systemRoot
+        # Windows PowerShell uses PATHEXT even for an absolute .exe path.
+        # Without it, it may shell-open the file asynchronously as a document.
+        $start.Environment['PATHEXT'] = '.COM;.EXE;.BAT;.CMD'
         $start.Environment['PATH'] = ((Split-Path $node), (Split-Path $python), (Join-Path $systemRoot 'System32')) -join ';'
         $start.Environment['TEMP'] = $root
         $start.Environment['TMP'] = $root

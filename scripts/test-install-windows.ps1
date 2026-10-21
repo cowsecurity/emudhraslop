@@ -99,6 +99,7 @@ try {
     Write-Host 'PASS: installer validation and extraction boundaries'
 
     if ($Smoke) {
+        if ('.EXE' -notin ($env:PATHEXT -split ';')) { throw 'Native shell smoke test requires .EXE in PATHEXT.' }
         $destination = Join-Path $root 'installed'
         $oldPath = $env:PATH
         & $Installer -Version $InstallVersion -BinDir $destination
