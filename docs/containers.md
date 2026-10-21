@@ -1,6 +1,6 @@
 # Run inside the application container
 
-Build `make release`. Select `dist/linux-amd64/emudhraslop` or `dist/linux-arm64/emudhraslop` to match the image architecture. Copy it into the image that contains the application, runtimes, trust stores, and service configuration. The checker is static; Python, Node, curl, or OpenSSL remain the image's own programs.
+Download and extract the Linux [release archive](releases.md) matching the image architecture: amd64, arm64, or ARM v7. For a source build, use `make release` and select the binary from the matching `dist/linux-*` directory. Copy it into the image that contains the application, runtimes, trust stores, and service configuration. The checker is static; Python, Node, curl, or OpenSSL remain the image's own programs.
 
 ```dockerfile
 FROM your-application@sha256:REPLACE_WITH_APPROVED_DIGEST

@@ -3,12 +3,12 @@
 Use the `windows-amd64.zip` archive for x64 Windows and `windows-arm64.zip` for Windows on ARM. Extract the archive and run PowerShell without Administrator elevation.
 
 ```powershell
-.\emudhraslop.exe inventory --json
+.\emudhraslop.exe inventory --no-cache --json
 .\emudhraslop.exe check --online --no-cache --json
-.\emudhraslop.exe check --online --services services.json --no-cache --json
+.\emudhraslop.exe check --online --services "$((Get-Location).Path)\services.json" --no-cache --json
 ```
 
-Managed inventory looks for Python, Node, curl and OpenSSL `.exe` files on bounded absolute PATH entries. It does not run scripts, Windows Store aliases, or enumerate every installed application or Windows service. Declare an application's actual executable, client library and trust settings to assess that context. Omit `uid` and `gid`: Windows probes use only the current non-elevated process token. Report UID `4294967295` is Go's unsupported Unix UID placeholder, not a Windows SID.
+Managed inventory looks for Python, Node, curl and OpenSSL `.exe` files on bounded absolute PATH entries. It does not run scripts, Windows Store aliases, or enumerate every installed application or Windows service. Declare an application's actual executable, client library and trust settings to assess that context. Pass an absolute local path to `--services`, and use absolute executable and CA paths inside the JSON. Omit `uid` and `gid`: Windows probes use only the current non-elevated process token. Report UID `4294967295` is Go's unsupported Unix UID placeholder, not a Windows SID.
 
 The Python stdlib, Requests, HTTPX, Botocore, Node TLS/HTTPS and curl adapters execute native clients. Online acceptance counts as affected only when the native client verifies the exact embedded incident leaf. Offline Python and Node inventory, failed connections and unattributed certificate rejections remain unknown. OpenSSL requires an explicit CA configuration; see [negative proof](negative-proof.md) for the exclusive CA-file scope required for a negative conclusion.
 

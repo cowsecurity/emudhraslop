@@ -14,23 +14,81 @@ Download from [cowsecurity/emudhraslop releases](https://github.com/cowsecurity/
 
 The full filename is `emudhraslop-VERSION-TARGET.EXTENSION`. Platform availability does not mean every application uses a supported trust verifier. Windows native certificate-store evaluation, elevated execution, and cached checks are unsupported; they produce explicit errors or unknown results. See [coverage](coverage.md) before interpreting any verdict.
 
-## Verify and run
+## Download on macOS or Linux
 
-Download `SHA256SUMS` from the same release as the archive. On Linux run `sha256sum --check --ignore-missing SHA256SUMS`; on macOS use `shasum -a 256 --check --ignore-missing SHA256SUMS`. A successful check establishes consistency with the published checksum file, not an independent publisher signature.
+These commands use the GitHub CLI (`gh`), authenticated with an account that can read this private repository. Run `gh auth login` first if needed. You can also download the archive and `SHA256SUMS` through the release page.
 
-On Windows compare the archive's `Get-FileHash -Algorithm SHA256` value with its exact filename entry in `SHA256SUMS`. Do not treat the hash of another architecture's archive as a match. Then use `Expand-Archive` into a new directory.
+Choose a target from the table above. This example downloads the Apple Silicon build; change `target` to `darwin-amd64`, `linux-amd64`, `linux-arm64`, or `linux-arm-v7` as needed. Run in a new directory:
 
-Extract Unix archives into a new directory, retain the included docs and manifest, then run:
+```sh
+version=0.1.0
+target=darwin-arm64
+archive="emudhraslop-${version}-${target}.tar.gz"
+mkdir "emudhraslop-${version}-${target}"
+cd "emudhraslop-${version}-${target}"
+gh release download "v${version}" --repo cowsecurity/emudhraslop \
+  --pattern "$archive" --pattern SHA256SUMS
+```
+
+Verify **before** extracting. On macOS:
+
+```sh
+shasum -a 256 --check --ignore-missing SHA256SUMS && tar -xzf "$archive"
+```
+
+On Linux:
+
+```sh
+sha256sum --check --ignore-missing SHA256SUMS && tar -xzf "$archive"
+```
+
+The output must show your archive filename followed by `OK`. Then run:
 
 ```sh
 ./emudhraslop version
-./emudhraslop inventory --scope managed --no-cache --json
-./emudhraslop check --offline --services /absolute/path/services.json --no-cache --json
+./emudhraslop check --online --no-cache
 ```
 
-On macOS keep the executable and `emudhraslop-sectrust` adjacent. Release archives are not Developer ID signed or notarized; managed distribution must apply the organization's reviewed signing and delivery process. Do not disable Gatekeeper to obtain a result. Windows builds are not Authenticode signed.
+`--online` contacts public incident test hosts and a clean control. Use `--offline` if network calls are not permitted. Exit 2 means affected; exit 3 means unknown. See the [README](../README.md#read-the-result) before interpreting either result.
 
-Use `emudhraslop.exe` in PowerShell. Run as the service's normal user and declare absolute Windows executable/CA paths in the service manifest. Do not run elevated or add Unix UID/GID fields. A Windows container must contain Windows clients; Linux container clients require the Linux binary inside that Linux image.
+On macOS, keep `emudhraslop-sectrust` next to the executable. Mac archives are unsigned and not notarized. If macOS blocks execution, use your organization's approved signing/distribution process; do not disable Gatekeeper.
+
+## Download on Windows
+
+Use a non-Administrator PowerShell window with an authenticated GitHub CLI. Set `$target` to `windows-arm64` for an ARM machine; otherwise use `windows-amd64`:
+
+```powershell
+$ErrorActionPreference = 'Stop'
+$version = '0.1.0'
+$target = 'windows-amd64'
+$archive = "emudhraslop-$version-$target.zip"
+New-Item -ItemType Directory "emudhraslop-$version-$target" | Out-Null
+Set-Location "emudhraslop-$version-$target"
+gh release download "v$version" --repo cowsecurity/emudhraslop `
+  --pattern $archive --pattern SHA256SUMS
+if ($LASTEXITCODE -ne 0) { throw 'Download failed' }
+
+$entries = @(Get-Content SHA256SUMS | Where-Object {
+  ($_ -split '\s+', 2)[1] -ceq $archive
+})
+if ($entries.Count -ne 1) { throw 'Missing or duplicate checksum entry' }
+$expected = ($entries[0] -split '\s+', 2)[0]
+$actual = (Get-FileHash $archive -Algorithm SHA256).Hash
+if ($actual -ine $expected) { throw 'Checksum mismatch' }
+Expand-Archive $archive -DestinationPath .
+
+.\emudhraslop.exe version
+.\emudhraslop.exe check --online --no-cache
+$LASTEXITCODE
+```
+
+Windows builds are unsigned. Run as the application's normal account. Use `--no-cache`; Windows caching and native Windows trust-store assessment are unsupported. See [Windows usage](windows.md) for service paths and supported clients.
+
+## Checksums and manifests
+
+`SHA256SUMS` checks that the download matches the published archive. It is not a publisher signature. `RELEASE-MANIFEST.json` records the version, target and payload hashes. Keep both with the archive if you need to reproduce an assessment.
+
+For a precise application check, create a [service file](../README.md#check-an-application). For containers, extract the Linux archive on your workstation or build machine, then [copy the binary into the application image](../README.md#check-a-container).
 
 ## Build archives
 

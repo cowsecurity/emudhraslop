@@ -21,7 +21,7 @@ Trust-store key matches are inventory evidence. They do not alone demonstrate th
 
 ## Declaring services
 
-Use a version 1 JSON manifest with a `services` array. Every entry needs a unique `id`, `kind`, absolute `executable` where the kind uses one, `client`, and a meaningful `source`. Set `uid` and `gid` to the service identity when invoking from root. Use `ca_bundle`, `ca_dir`, and permitted `environment` settings only when they match the real service. `image_digest` records the image identity supplied by the operator; it is not remotely verified.
+Use a version 1 JSON manifest with a `services` array. Every entry needs a unique `id`, `kind`, and an absolute `executable` for supported clients. Set `client` explicitly to select the library you use. Reports label these entries as `service-manifest`; a supplied `source` does not change the check. Set `uid` and `gid` to the service identity when invoking from root. Use `ca_bundle`, `ca_dir`, and permitted `environment` settings only when they match the real service. `image_digest` records the image identity supplied by the operator; it is not remotely verified.
 
 Never copy a complete process environment. The manifest is configuration, not a place for tokens, proxy passwords, preload hooks, or executable arguments. TLS verification disabled in a declared service is a security finding even if package versions are current.
 
