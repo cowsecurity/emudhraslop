@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"unsafe"
 )
 
 // Only ordinary local drive paths are accepted. Device namespaces, network
@@ -26,30 +27,82 @@ func ValidPath(path string) bool {
 	return true
 }
 
+var ntOpenFile = syscall.NewLazyDLL("ntdll.dll").NewProc("NtOpenFile")
+var queryDosDevice = syscall.NewLazyDLL("kernel32.dll").NewProc("QueryDosDeviceW")
+
+type unicodeString struct {
+	Length, MaximumLength uint16
+	Buffer                *uint16
+}
+type objectAttributes struct {
+	Length                                       uint32
+	RootDirectory                                syscall.Handle
+	ObjectName                                   *unicodeString
+	Attributes                                   uint32
+	SecurityDescriptor, SecurityQualityOfService uintptr
+}
+type ioStatusBlock struct{ Status, Information uintptr }
+
 func OpenRead(path string) (*os.File, error) {
 	if !ValidPath(path) {
 		return nil, errors.New("ordinary local file path required")
 	}
-	resolved, err := filepath.EvalSymlinks(path)
-	if err != nil || !ValidPath(resolved) {
-		return nil, errors.New("local file cannot be resolved")
-	}
-	p, err := syscall.UTF16PtrFromString(resolved)
+	native, err := localVolumePath(path)
 	if err != nil {
 		return nil, err
 	}
-	// Opening the final component itself prevents replacement by a named pipe
-	// symlink. Directory access is needed for bounded CApath fingerprinting.
-	h, err := syscall.CreateFile(p, syscall.GENERIC_READ, syscall.FILE_SHARE_READ|syscall.FILE_SHARE_WRITE|syscall.FILE_SHARE_DELETE, nil, syscall.OPEN_EXISTING, syscall.FILE_FLAG_OPEN_REPARSE_POINT|syscall.FILE_FLAG_BACKUP_SEMANTICS, 0)
+	encoded, err := syscall.UTF16FromString(native)
 	if err != nil {
 		return nil, err
 	}
-	f := os.NewFile(uintptr(h), resolved)
-	info, err := f.Stat()
-	kind, typeErr := syscall.GetFileType(h)
-	if err != nil || typeErr != nil || kind != syscall.FILE_TYPE_DISK || info.Mode()&os.ModeSymlink != 0 {
-		f.Close()
+	name := unicodeString{Length: uint16((len(encoded) - 1) * 2), MaximumLength: uint16(len(encoded) * 2), Buffer: &encoded[0]}
+	attrs := objectAttributes{Length: uint32(unsafe.Sizeof(objectAttributes{})), ObjectName: &name, Attributes: 0x40 | 0x1000} // CASE_INSENSITIVE | DONT_REPARSE
+	var handle syscall.Handle
+	var status ioStatusBlock
+	// Kernel path parsing rejects every reparse component atomically. A chain of
+	// userspace ancestor checks would still permit a junction-swap race. These
+	// flags allow regular files/directories and open the final reparse point
+	// itself, which is rejected below, without following its destination.
+	result, _, _ := ntOpenFile.Call(uintptr(unsafe.Pointer(&handle)), syscall.GENERIC_READ|0x100000, uintptr(unsafe.Pointer(&attrs)), uintptr(unsafe.Pointer(&status)), syscall.FILE_SHARE_READ|syscall.FILE_SHARE_WRITE|syscall.FILE_SHARE_DELETE, 0x20|0x4000|0x200000)
+	if uint32(result) == 0xc000050b {
+		return nil, ErrReparse
+	} // STATUS_REPARSE_POINT_ENCOUNTERED
+	if uint32(result) != 0 {
+		return nil, errors.New("local file cannot be opened without reparsing")
+	}
+	var info syscall.ByHandleFileInformation
+	err = syscall.GetFileInformationByHandle(handle, &info)
+	kind, typeErr := syscall.GetFileType(handle)
+	if err != nil || typeErr != nil || kind != syscall.FILE_TYPE_DISK || info.FileAttributes&syscall.FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+		syscall.CloseHandle(handle)
+		if info.FileAttributes&syscall.FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+			return nil, ErrReparse
+		}
 		return nil, errors.New("ordinary local disk file required")
 	}
-	return f, nil
+	return os.NewFile(uintptr(handle), path), nil
+}
+
+// Query the DOS alias without opening it, then address the stable local volume
+// directly. Mapped network drives and SUBST aliases are unsupported; a caller
+// cannot redirect a drive-letter lookup into SMB after validation.
+func localVolumePath(path string) (string, error) {
+	drive, _ := syscall.UTF16PtrFromString(path[:2])
+	buffer := make([]uint16, 1024)
+	n, _, _ := queryDosDevice.Call(uintptr(unsafe.Pointer(drive)), uintptr(unsafe.Pointer(&buffer[0])), uintptr(len(buffer)))
+	if n == 0 || n >= uintptr(len(buffer)) {
+		return "", errors.New("local volume mapping unavailable")
+	}
+	target := syscall.UTF16ToString(buffer)
+	const prefix = `\Device\HarddiskVolume`
+	suffix, ok := strings.CutPrefix(target, prefix)
+	if !ok || suffix == "" {
+		return "", ErrNonlocal
+	}
+	for _, digit := range suffix {
+		if digit < '0' || digit > '9' {
+			return "", ErrNonlocal
+		}
+	}
+	return target + path[2:], nil
 }

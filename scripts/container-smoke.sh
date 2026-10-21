@@ -35,6 +35,12 @@ for base in $SMOKE_IMAGES; do
   cat > "$context/services.json" <<JSON
 {"schema_version":1,"services":[{"id":"fixture-$index","kind":"$kind","client":"$client","executable":"$executable","uid":10001,"gid":10001,"source":"container smoke fixture"}]}
 JSON
+  if [ "$base" != scratch ]; then
+    if ! "$CONTAINER_ENGINE" pull "$base" > "$SMOKE_OUTPUT/$index-pull.log" 2>&1; then
+      cat "$SMOKE_OUTPUT/$index-pull.log" >&2
+      exit 1
+    fi
+  fi
   image="localhost/emudhraslop-smoke:fixture-$index"
   if ! "$CONTAINER_ENGINE" build --build-arg "BASE_IMAGE=$base" -t "$image" "$context" \
     > "$SMOKE_OUTPUT/$index-build.log" 2>&1; then

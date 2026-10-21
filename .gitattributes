@@ -1,0 +1,3 @@
+* text=auto eol=lf
+# Integrity checks cover exact embedded bytes on every checkout platform.
+internal/incident/data/** -text

@@ -3,6 +3,7 @@
 package discovery
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -69,15 +70,37 @@ func Managed() ([]model.Target, model.Coverage) {
 				name += ".exe"
 			}
 			path := filepath.Join(dir, name)
-			info, err := os.Stat(path)
+			var info os.FileInfo
+			var err error
+			resolved := path
+			if runtime.GOOS == "windows" {
+				// Do not Stat or resolve a candidate before the no-reparse open:
+				// either operation could traverse a local junction into SMB.
+				if !platform.ValidPath(path) {
+					continue
+				}
+				file, openErr := platform.OpenRead(path)
+				if openErr != nil {
+					if errors.Is(openErr, platform.ErrReparse) || errors.Is(openErr, platform.ErrNonlocal) {
+						coverage.Warnings = append(coverage.Warnings, "reparse or indirect-volume executable path excluded; declare a direct local context")
+					}
+					continue
+				}
+				info, err = file.Stat()
+				file.Close()
+			} else {
+				info, err = os.Stat(path)
+				if err == nil {
+					resolved, err = filepath.EvalSymlinks(path)
+					if err != nil {
+						coverage.Warnings = append(coverage.Warnings, "unresolvable managed executable excluded")
+					}
+				}
+			}
 			if err != nil || !info.Mode().IsRegular() || (runtime.GOOS != "windows" && info.Mode().Perm()&0111 == 0) {
 				continue
 			}
-			resolved, err := filepath.EvalSymlinks(path)
-			if err != nil {
-				coverage.Warnings = append(coverage.Warnings, "unresolvable managed executable excluded")
-				continue
-			}
+
 			key := candidate.kind + ":" + resolved
 			if runtime.GOOS == "windows" {
 				key = strings.ToLower(key)

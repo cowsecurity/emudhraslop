@@ -97,7 +97,7 @@ func hashFile(h hash.Hash, path string, limit int64, budget *int64, seen map[str
 		return errors.New("context file could not be fully fingerprinted")
 	}
 	after, err := f.Stat()
-	current, statErr := os.Stat(path)
+	current, statErr := fingerprintCurrent(path)
 	if err != nil || statErr != nil || !os.SameFile(before, current) || before.Size() != n || after.Size() != before.Size() || !after.ModTime().Equal(before.ModTime()) {
 		return errors.New("context file changed during fingerprint")
 	}
@@ -134,9 +134,20 @@ func hashDirectory(h hash.Hash, path string, budget *int64, seen map[string]bool
 		}
 	}
 	after, err := f.Stat()
-	current, statErr := os.Stat(path)
+	current, statErr := fingerprintCurrent(path)
 	if err != nil || statErr != nil || !os.SameFile(info, current) || !after.ModTime().Equal(info.ModTime()) {
 		return errors.New("trust directory changed during fingerprint")
 	}
 	return nil
+}
+
+// Reopen through the same no-reparse boundary used for the original read. An
+// ordinary path Stat on Windows could follow a replaced junction into SMB.
+func fingerprintCurrent(path string) (os.FileInfo, error) {
+	file, err := platform.OpenRead(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	return file.Stat()
 }

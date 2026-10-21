@@ -24,6 +24,10 @@ USER 0:0
 ENV TMPDIR=/var/lib/emudhraslop-tests
 ENTRYPOINT ["/bin/sh", "-eu", "-c"]
 DOCKERFILE
+if ! "$CONTAINER_ENGINE" pull "$ROOT_TEST_BASE" > "$ROOT_TEST_OUTPUT/pull.log" 2>&1; then
+  cat "$ROOT_TEST_OUTPUT/pull.log" >&2
+  exit 1
+fi
 image="localhost/emudhraslop-root-tests:fixture"
 if ! "$CONTAINER_ENGINE" build --build-arg "BASE_IMAGE=$ROOT_TEST_BASE" -t "$image" "$context" \
   > "$ROOT_TEST_OUTPUT/build.log" 2>&1; then
