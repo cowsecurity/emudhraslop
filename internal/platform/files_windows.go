@@ -67,6 +67,12 @@ func OpenRead(path string) (*os.File, error) {
 	if uint32(result) == 0xc000050b {
 		return nil, ErrReparse
 	} // STATUS_REPARSE_POINT_ENCOUNTERED
+	// Preserve absence of an optional configuration file without weakening the
+	// no-reparse boundary or treating permission/volume errors as absence.
+	// MS-ERREF: STATUS_OBJECT_NAME_NOT_FOUND / STATUS_OBJECT_PATH_NOT_FOUND.
+	if uint32(result) == 0xc0000034 || uint32(result) == 0xc000003a {
+		return nil, os.ErrNotExist
+	}
 	if uint32(result) != 0 {
 		return nil, errors.New("local file cannot be opened without reparsing")
 	}

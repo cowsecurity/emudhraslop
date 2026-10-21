@@ -37,6 +37,30 @@ func TestWindowsLocalRegularFileReadable(t *testing.T) {
 	}
 }
 
+func TestWindowsOptionalFileAbsenceIsDistinctFromUnsafePaths(t *testing.T) {
+	root := t.TempDir()
+	for _, path := range []string{filepath.Join(root, "pyvenv.cfg"), filepath.Join(root, "missing", "pyvenv.cfg")} {
+		file, err := OpenRead(path)
+		if file != nil {
+			file.Close()
+			t.Fatal("missing file opened")
+		}
+		if !os.IsNotExist(err) {
+			t.Fatalf("missing optional file lost its error class: %v", err)
+		}
+	}
+	for _, path := range []string{`\\server\share\pyvenv.cfg`, `C:\NUL`, `C:\dir\file:stream`} {
+		file, err := OpenRead(path)
+		if file != nil {
+			file.Close()
+			t.Fatal("unsafe path opened")
+		}
+		if err == nil || os.IsNotExist(err) {
+			t.Fatal("unsafe path disguised as missing optional configuration")
+		}
+	}
+}
+
 // Mount points can be created in an owned directory by a standard account;
 // unlike symbolic links, these tests need no developer-mode privilege.
 func junction(t *testing.T, path, target string) error {
